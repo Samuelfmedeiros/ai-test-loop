@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.loop/
+loop.json
+.venv/
+*-report-r*.json
+*-state.json

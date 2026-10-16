@@ -1,0 +1,15 @@
+{
+  "name": "my-project",
+  "threshold": 85,
+  "max_rounds": 8,
+  "checks": [
+    {"name": "unit tests",   "cmd": "pytest -q",              "weight": 35, "timeout_s": 900},
+    {"name": "type check",   "cmd": "mypy src",               "weight": 10, "timeout_s": 300},
+    {"name": "build",        "cmd": "npm run build",          "weight": 20, "timeout_s": 600},
+    {"name": "api responds", "cmd": "curl -sS 127.0.0.1:8000/health", "weight": 15,
+     "must_match": "\"status\"\\s*:\\s*\"ok\""},
+    {"name": "no secrets",   "cmd": "gitleaks detect --no-banner", "weight": 20,
+     "fail_if_output_matches": "leaks found: [1-9]",
+     "required": true}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "ai-test-loop-demo",
+  "threshold": 85,
+  "max_rounds": 3,
+  "checks": [
+    {"name": "critic compiles", "cmd": "python3 -m py_compile scripts/loop_runner.py", "weight": 15, "timeout_s": 120},
+    {"name": "demo self-test", "cmd": "python3 examples/demo/demo_app.py --selftest", "weight": 30, "timeout_s": 120},
+    {"name": "summary math", "cmd": "python3 examples/demo/demo_app.py --check", "weight": 30,
+     "must_match": "OK summary=\\{'a': 5, 'b': 4\\}", "timeout_s": 120},
+    {"name": "no secrets in tree", "cmd": "grep -rInE 'AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{24,}' --include='*.py' --include='*.json' --include='*.md' .", "weight": 15, "expect_exit": 1, "fail_if_output_matches": ".+"},
+    {"name": "readme non-empty", "cmd": "test -s README.md", "weight": 10, "timeout_s": 60}
+  ]
+}

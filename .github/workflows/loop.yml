@@ -1,0 +1,45 @@
+name: loop
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  critic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run the critic on this repo
+        run: python3 scripts/loop_runner.py --config examples/demo/loop.demo.json
+
+      # A critic that cannot fail is decoration. This job proves the loop fails an artifact whose
+      # self-test passes but whose behaviour is wrong (the false green in examples/demo).
+      - name: The critic must reject a broken artifact
+        run: |
+          set +e
+          out=$(python3 scripts/loop_runner.py --config examples/demo/loop.demo-fail.json)
+          rc=$?
+          echo "$out"
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::the critic passed a broken artifact — the loop is decoration"
+            exit 1
+          fi
+          if ! echo "$out" | grep -q '^GATE=failed'; then
+            echo "::error::expected GATE=failed from the broken artifact"
+            exit 1
+          fi
+          echo "ok: broken artifact rejected (rc=$rc)"
+
+      - name: Save the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: loop-evidence
+          path: .loop/*.json
+          if-no-files-found: ignore
