@@ -10,6 +10,9 @@ No API keys, no dependencies, no model calls. `loop_runner.py` is deliberately d
 optional output patterns decide pass/fail. The model never gets to *say* the work is good — it has
 to *show* it.
 
+> **Quer isso pronto para o seu time?** Os packs com entrega por e-mail, o gate com relatório
+> e o guia de verificação estão em **https://skills.seu.pet/gratis/ai-test-loop**
+
 ---
 
 ## The problem
