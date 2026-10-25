@@ -15,6 +15,15 @@ to *show* it.
 
 ---
 
+## Install as a package
+
+```bash
+pip install agent-test-loop
+agent-test-loop --config loop.json --dry-run
+```
+
+PyPI: https://pypi.org/project/agent-test-loop/
+
 ## The problem
 
 Ask an agent "is this done?" and it answers about its own reasoning. The same context that produced
