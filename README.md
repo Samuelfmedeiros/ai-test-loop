@@ -38,6 +38,26 @@ the artifact also decides it is correct, so real defects survive to delivery:
 Running "one more review pass" does not help, because the reviewer and the builder are the same
 process. Separating them is the whole trick.
 
+## Install
+
+Two packages, same engine — pick the ecosystem you already have:
+
+```bash
+pip install agent-test-loop     # Python 3.9+  (PyPI)
+npx ai-test-loop --help         # Node 18+    (npm)
+```
+
+Both ship the same `loop_runner.py` and the same example config, so the gate you run locally is the
+gate CI runs. Verify with a dry run — it prints the checks and weights without executing anything:
+
+```bash
+agent-test-loop --config templates/loop.example.json --dry-run
+npx ai-test-loop --config templates/loop.example.json --dry-run
+```
+
+Need the full QA gate — visual diff, training guard, delivery evidence — instead of the free runner?
+See the [full pack](https://skills.seu.pet/p/pack-completo?utm_source=github&utm_medium=readme&utm_campaign=ai-test-loop).
+
 ## Quickstart
 
 ```bash
