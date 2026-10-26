@@ -11,7 +11,7 @@ optional output patterns decide pass/fail. The model never gets to *say* the wor
 to *show* it.
 
 > **Quer isso pronto para o seu time?** Os packs com entrega por e-mail, o gate com relatório
-> e o guia de verificação estão em **https://skills.seu.pet/gratis/ai-test-loop**
+> e o guia de verificação estão em **https://skills.seu.pet/gratis/ai-test-loop?utm_source=github&utm_medium=readme&utm_campaign=ai-test-loop**
 
 ---
 
@@ -155,9 +155,9 @@ cost of being wrong. It is for artifacts a human will rely on.
 This repo is the free, complete tool. The store has the ready-made packs for the cases where
 writing the checks is the slow part — CI gates, visual regression, MCP servers, MLOps guards:
 
-- Free download / e-mail delivery: **https://skills.seu.pet/gratis/ai-test-loop**
-- Catalog: **https://skills.seu.pet**
-- Want it installed and wired into your repo: **https://skills.seu.pet/servico**
+- Free download / e-mail delivery: **https://skills.seu.pet/gratis/ai-test-loop?utm_source=github&utm_medium=readme&utm_campaign=ai-test-loop**
+- Catalog: **https://skills.seu.pet/?utm_source=github&utm_medium=readme&utm_campaign=ai-test-loop**
+- Want it installed and wired into your repo: **https://skills.seu.pet/servico?utm_source=github&utm_medium=readme&utm_campaign=ai-test-loop**
 
 ## License
 
@@ -171,4 +171,4 @@ O loop de teste para agentes: o construtor não assina o próprio trabalho. Um c
 de verdade, dá nota 0–100, repete até o limite e barra a entrega se houver achado de segurança.
 `python3 scripts/loop_runner.py --config loop.json` — sem chave de API e sem dependência.
 
-Versão com entrega por e-mail e os packs prontos: https://skills.seu.pet/gratis/ai-test-loop
+Versão com entrega por e-mail e os packs prontos: https://skills.seu.pet/gratis/ai-test-loop?utm_source=github&utm_medium=readme&utm_campaign=ai-test-loop
