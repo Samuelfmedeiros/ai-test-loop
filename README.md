@@ -134,6 +134,33 @@ user-facing surface. Each returns strict JSON:
 Consensus → deliver. Majority disagree → reopen the loop with the combined gaps. Prompt in
 `references/reviewer-prompt.md`, starting rubric in `references/scoring-rubric.md`.
 
+## Telemetry (opt-out, and what it is not)
+
+The `npx ai-test-loop` wrapper sends **one anonymous event per run** so the project knows whether
+the tool is actually used — downloads alone are not usage (npm counts mirrors and CI, and the
+publish-day spike was 270 of 555 downloads in a month).
+
+What is sent: event type (`run`/`help`/`version`/`erro`), package version, Node major, Python major,
+OS name, duration in ms, and — only on a real run — the final score and the number of gaps.
+
+What is **never** sent: your IP (not logged server-side), e-mail, project path, file names, the
+content of your checks, the command output, or anything from your code.
+
+The install id is a random UUID written to `~/.ai-test-loop/telemetry-id` once. It counts machines,
+not people, and is not linked to anything else. Delete that file and you are a new machine.
+
+Turn it off however you prefer:
+
+```bash
+ai-test-loop --no-telemetry ...          # that run only
+export AI_TEST_LOOP_NO_TELEMETRY=1       # permanently, in your shell profile
+export DO_NOT_TRACK=1                    # the ecosystem-wide convention, also respected
+# CI=1 is detected automatically: pipelines are not people
+```
+
+Telemetry never blocks and never waits: if the network is down the CLI runs exactly the same, with
+no delay and no message.
+
 ## When not to use it
 
 Throwaway exploration, spike branches, and one-line answers where the cost of the loop exceeds the
