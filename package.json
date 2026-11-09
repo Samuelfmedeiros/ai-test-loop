@@ -1,6 +1,6 @@
 {
   "name": "ai-test-loop",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Deterministic critic for AI agents: runs weighed checks for real, scores 0-100 and blocks delivery below the threshold. Stdlib-only runner.",
   "license": "MIT",
   "author": "Samuel Medeiros",
