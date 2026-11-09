@@ -120,14 +120,58 @@ function base(evento, modo) {
   };
 }
 
+
+// ---------------------------------------------------------------- ajuda
+// O usuario que roda `npx ai-test-loop@latest` sem argumento via um erro cru do
+// argparse ("--config is required") — nao descobre o que a ferramenta faz nem por
+// onde comecar. `--help` tambem mostrava o usage do loop_runner.py, que fala de
+// --round/--show-state sem contexto. Aqui a ajuda e do PRODUTO: o que ele faz, o
+// caminho mais curto para ver a nota, e onde pegar o pacote completo.
+const AJUDA = `
+ai-test-loop — nota 0-100 no seu agente antes de entregar.
+
+USO
+  ai-test-loop --config <arquivo.json>       roda as checagens e imprime a nota
+  ai-test-loop --config <arq> --dry-run      mostra o que rodaria, sem executar
+  ai-test-loop --config <arq> --quiet        só SCORE/GAPS/EVIDENCE
+  ai-test-loop --config <arq> --json         relatório completo em JSON
+  ai-test-loop --show-state                  última rodada e placar guardados
+  ai-test-loop --version                     versão do pacote
+  ai-test-loop --help                        esta ajuda
+
+PRIMEIRA VEZ
+  1. copie a config de exemplo:   npx ai-test-loop@latest --config loop.example.json --dry-run
+  2. declare suas checagens (nome, comando, peso, o que significa passar)
+  3. rode sem --dry-run e receba a nota, com os gaps que faltam
+
+OPÇÕES DO WRAPPER
+  --no-telemetry                 não envia evento anônimo nesta execução
+  AI_TEST_LOOP_NO_TELEMETRY=1    desliga permanentemente
+  AI_TEST_LOOP_PYTHON=<path>     força um interpretador Python
+
+O runner é Python puro (stdlib). Não faz deploy, não faz merge e não abre rede.
+
+Pacote completo, packs e suporte: https://skills.seu.pet/p/ai-test-loop?utm_source=cli&utm_medium=help&utm_campaign=ai-test-loop
+`;
+
 // ---------------------------------------------------------------- execução
 const modo = modoDe(argv);
 
 // --help e --version saem antes de qualquer run: o evento mostra que a pessoa
 // chegou a perguntar como usar, que é o degrau mais barato do funil.
-const envioInicial = (modo === "help" || modo === "version")
-  ? enviar(base(modo, modo))
+const semArgumentos = argvRunner.length === 0;
+
+const envioInicial = (modo === "help" || modo === "version" || semArgumentos)
+  ? enviar(base(semArgumentos ? "help" : modo, modo))
   : Promise.resolve();
+
+// Sem argumento NAO pode cair no argparse do Python: o usuario recebia
+// "error: the following arguments are required: --config" e ia embora sem saber
+// o que a ferramenta faz (medido 09/11/2026 na 1.0.2 publicada).
+if (modo === "help" || semArgumentos) {
+  console.log(AJUDA.trim());
+  envioInicial.finally(() => process.exit(0));
+}
 
 // --version e do WRAPPER: nao existe --version no runner Python. Repassar faz o
 // argparse morrer com "the following arguments are required: --config" (medido
@@ -137,12 +181,12 @@ const envioInicial = (modo === "help" || modo === "version")
 if (modo === "version") {
   console.log(VERSAO);
   envioInicial.finally(() => process.exit(0));
-  return;   // dentro de bloco top-level nao ha return; ver abaixo
 }
 
-const candidatos = process.env.AI_TEST_LOOP_PYTHON
+const sairSemPython = (modo === "help" || modo === "version" || semArgumentos);
+const candidatos = sairSemPython ? [] : (process.env.AI_TEST_LOOP_PYTHON
   ? [process.env.AI_TEST_LOOP_PYTHON]
-  : ["python3", "python"];
+  : ["python3", "python"]);
 
 const inicio = Date.now();
 let saidaScore = "";   // o runner imprime SCORE=<n> na saída
@@ -185,4 +229,4 @@ function tentar(i) {
   });
 }
 
-tentar(0);
+if (!sairSemPython) tentar(0);
