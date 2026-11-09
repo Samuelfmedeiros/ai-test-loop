@@ -129,6 +129,17 @@ const envioInicial = (modo === "help" || modo === "version")
   ? enviar(base(modo, modo))
   : Promise.resolve();
 
+// --version e do WRAPPER: nao existe --version no runner Python. Repassar faz o
+// argparse morrer com "the following arguments are required: --config" (medido
+// 09/11/2026 — o comando documentado `npx ai-test-loop@latest --version` saia com
+// erro em vez da versao). Mesmo com --help o wrapper imprimia o usage do Python,
+// que e confuso mas funciona; aqui os dois saem do wrapper, sem tocar no Python.
+if (modo === "version") {
+  console.log(VERSAO);
+  envioInicial.finally(() => process.exit(0));
+  return;   // dentro de bloco top-level nao ha return; ver abaixo
+}
+
 const candidatos = process.env.AI_TEST_LOOP_PYTHON
   ? [process.env.AI_TEST_LOOP_PYTHON]
   : ["python3", "python"];

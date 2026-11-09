@@ -155,7 +155,17 @@ def score(checks: list[dict]) -> float:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(add_help=True, description="Deterministic critic for the AI Test Loop")
+    ap = argparse.ArgumentParser(
+        add_help=True,
+        description="Deterministic critic for the AI Test Loop",
+        # 09/11/2026: o --help era o UNICO ponto de contato do dev com o pacote e
+        # nao dizia nada sobre o resto do produto. Medido: 555 downloads/npm no mes
+        # e ZERO hits com utm_source=npm na loja. O epilog e o unico lugar honesto
+        # de por o link (nao interrompe a saida, nao quebra script de terceiro).
+        epilog=("Full version, packs and paid support: "
+                "https://skills.seu.pet/p/ai-test-loop"
+                "?utm_source=cli&utm_medium=help&utm_campaign=ai-test-loop"),
+    )
     ap.add_argument("--config", required=True)
     ap.add_argument("--round", type=int)
     ap.add_argument("--json", action="store_true", help="also dump the full report as JSON to stdout")

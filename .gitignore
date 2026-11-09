@@ -5,3 +5,6 @@ loop.json
 .venv/
 *-report-r*.json
 *-state.json
+
+# backups locais de edicao (nao versionar)
+*.bak-*
