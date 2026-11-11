@@ -7,6 +7,39 @@ scores the artifact 0–100, and a fail-closed gate blocks delivery below the th
 npx ai-test-loop --config loop.json     # zero install, no Python needed
 ```
 
+**Just want a score for your project?** Paste the path or the GitHub URL — no config file:
+
+```bash
+npx ai-test-loop --repo https://github.com/you/your-project
+```
+
+Real output from a project that had no config at all:
+
+```
+  PASS  testes automáticos (npm)     w=40.0     3.93s  8 passed
+  FAIL  padrão do código             w=10.0     0.07s  7 fixable with --fix
+
+  Resultado de ai-test-loop
+  ----------------------------
+  Nenhuma falha grave, mas a nota ficou abaixo do corte por causa dos avisos.
+
+  Nota (parcial): 80 de 100 — precisa de 85 para passar.
+
+  Não deu para checar (e por isso não conta como falha):
+    - testes automáticos (Python): o projeto precisa de 'pytest' (pip install pytest)
+
+SCORE=80.0
+GATE=failed (round 1/1)
+```
+
+Quick mode obeys three rules, and they are why its score can be trusted:
+
+- **It never invents a check.** A missing tool is reported as "could not check" — it never becomes
+  a failure, and never becomes a pass either.
+- **It never writes inside your project.** All state lives in `~/.cache/ai-test-loop/<hash>/`.
+- **Nothing ran means no verdict.** If the environment is incomplete, you get exit code **2**
+  ("could not judge") instead of a fake green. Exit codes: `0` passed, `1` failed, `2` inconclusive.
+
 Real output, not a mockup:
 
 ```
