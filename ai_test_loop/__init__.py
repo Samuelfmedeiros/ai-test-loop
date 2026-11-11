@@ -7,4 +7,4 @@ Por que o casco existe: `pip install ai-test-loop` precisa dar o mesmo comando q
 `npx ai-test-loop`, senão o produto tem dois nomes e as estatísticas ficam partidas.
 """
 
-__version__ = "1.1.0"
+__version__ = "1.1.2"
