@@ -66,6 +66,7 @@ from datetime import datetime, timezone
 
 DEFAULT_TIMEOUT = 900
 MAX_OUTPUT_CHARS = 8000
+_SHELL: list[str] | None = None
 
 
 def load_config(path: str) -> dict:
@@ -90,15 +91,42 @@ def load_config(path: str) -> dict:
     return cfg
 
 
+def _shell() -> list[str]:
+    """Shell wrapper for one check, decided once per process.
+
+    bash -o pipefail is the strong default: without it `pytest | tail` returns tail's
+    exit code (0) and a failing check scores as passing — the most common false green.
+
+    But hardcoding "bash" crashes on machines that have no bash (minimal containers,
+    alpine, stripped PATH). Measured: FileNotFoundError traceback, not a gate failure.
+    So: bash when available, /bin/sh on POSIX (pipefail lost but the check runs), and
+    cmd.exe on Windows (where bash only exists if Git Bash is installed).
+    """
+    global _SHELL
+    if _SHELL is not None:
+        return _SHELL
+    def works(cmd: str) -> bool:
+        try:
+            return subprocess.run([cmd, "-c", "exit 0"], capture_output=True).returncode == 0
+        except (FileNotFoundError, PermissionError, OSError):
+            return False
+    if os.name == "nt":
+        _SHELL = ["bash", "-o", "pipefail", "-c"] if works("bash") else [
+            os.environ.get("ComSpec", "cmd.exe"), "/d", "/s", "/c"]
+    else:
+        _SHELL = ["bash", "-o", "pipefail", "-c"] if works("bash") else ["/bin/sh", "-c"]
+    return _SHELL
+
+
 def run_check(chk: dict) -> dict:
     """Run one check for real, return its result record with raw evidence."""
     name = chk.get("name") or chk["cmd"][:40]
     timeout = int(chk.get("timeout_s", DEFAULT_TIMEOUT))
     cwd = chk.get("cwd") or None
     expect_exit = int(chk.get("expect_exit", 0))
-    # bash -o pipefail: without it, `pytest | tail` returns tail's exit code (0) and a failing
-    # check scores as passing — the single most common false green in this kind of runner.
-    wrapped = ["bash", "-o", "pipefail", "-c", chk["cmd"]]
+    # bash -o pipefail: sem ele `pytest | tail` devolve o exit code do tail (0) e o check
+    # que falhou pontua como aprovado — o falso verde mais comum deste tipo de runner.
+    wrapped = _shell() + [chk["cmd"]]
     started = time.time()
     timed_out = False
     try:
@@ -166,13 +194,48 @@ def main() -> int:
                 "https://skills.seu.pet/p/ai-test-loop"
                 "?utm_source=cli&utm_medium=help&utm_campaign=ai-test-loop"),
     )
-    ap.add_argument("--config", required=True)
+    ap.add_argument("--config", help="arquivo loop.json (opcional se usar --repo)")
+    ap.add_argument("--repo", help="caminho da pasta ou URL do repositório — monta o teste sozinho")
     ap.add_argument("--round", type=int)
     ap.add_argument("--json", action="store_true", help="also dump the full report as JSON to stdout")
     ap.add_argument("--quiet", action="store_true", help="only SCORE/GAPS/EVIDENCE lines")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--show-state", action="store_true")
     args = ap.parse_args()
+
+    # Modo rápido (11/11/2026): sem `--config` e com `--repo`, o teste se monta sozinho.
+    # Quem tem a config escrita continua igual — este caminho só existe para não
+    # obrigar ninguém a aprender o schema antes de ver o primeiro resultado.
+    faltando: list[dict] = []
+    achados: dict = {}
+    if args.repo and not args.config:
+        from repo_probe import build_config, cache_dir, prepare_repo
+        raiz = prepare_repo(args.repo)
+        cfg_auto, faltando, achados = build_config(raiz, args.repo)
+        cache = cache_dir(os.path.abspath(raiz))
+        destino = os.path.join(cache, "loop.json")
+        pathlib.Path(destino).write_text(
+            json.dumps(cfg_auto, indent=2, ensure_ascii=False), encoding="utf-8")
+        args.config = destino
+        # O modo rápido é uma foto do projeto AGORA, não uma campanha de rodadas:
+        # reaproveitar o estado anterior faria a segunda execução abortar com
+        # "max_rounds exhausted" (medido 11/11/2026). Quem quer histórico usa
+        # --config, onde o estado é do usuário e continua intocado.
+        for velho in (".loop-state.json", "loop-report-r1.json"):
+            alvo = os.path.join(cache, velho)
+            if os.path.exists(alvo):
+                os.remove(alvo)
+        os.environ["ATL_REPO_ROOT"] = raiz
+        if not cfg_auto["checks"]:
+            # nada executável detectado: não inventa check vazio nem dá nota falsa
+            print("Nenhum teste automático encontrado neste projeto.")
+            for f in faltando:
+                print(f"  não deu para checar {f['nome']}: {f['motivo']}")
+            print("Rode com --config para apontar seus próprios comandos.")
+            return 2
+    elif not args.config:
+        sys.stderr.write("ai-test-loop: informe --repo <pasta|url> ou --config <loop.json>\n")
+        return 2
 
     cfg_path = os.path.abspath(args.config)
     cfg = load_config(cfg_path)
@@ -219,6 +282,21 @@ def main() -> int:
                   file=sys.stderr, flush=True)
         results.append(run_check(chk))
 
+    # Modo rápido: falta de dependência do projeto não é falha do projeto. Só neste
+    # caminho — com --config o usuário declarou o que quer medir e a falha vale.
+    if args.repo:
+        try:
+            from repo_probe import reclassify
+            results, faltando_dep = reclassify(results)
+            faltando = faltando + faltando_dep
+            if not results:
+                print("Não deu para verificar nada: faltam dependências deste projeto.")
+                for f in faltando:
+                    print(f"  - {f['nome']}: {f['motivo']}")
+                return 2
+        except ImportError as exc:
+            sys.stderr.write(f"[aviso] reclassificação indisponível: {exc}\n")
+
     value = score(results)
     threshold = float(cfg["threshold"])
     gate = value >= threshold
@@ -260,15 +338,42 @@ def main() -> int:
             detail = c["evidence"].strip().splitlines()[-1][:160] if c["evidence"].strip() else "(no output)"
             print(f"  {status}  {c['name']:<28} w={c['weight']:<5} {c['duration_s']:>7}s  {detail}")
 
+    if args.repo and not args.quiet:
+        # Saída em português de gente ANTES do bloco técnico. Quem colou o projeto
+        # para "ver se está bom" não é necessariamente programador; o SCORE/GAPS
+        # continua abaixo porque CI e script de terceiro dependem dele.
+        try:
+            from repo_probe import human_report
+            print(human_report(os.environ.get("ATL_REPO_ROOT", base), cfg, faltando,
+                               achados, value, gate, results))
+        except Exception as exc:  # nunca esconder a nota por causa do resumo
+            sys.stderr.write(f"[aviso] resumo legível falhou: {type(exc).__name__}: {exc}\n")
+
+    # Se nada com peso cheio rodou, não existe veredito — e anunciar GATE=passed aqui
+    # faria um script de CI tratar "0 verificado" como aprovado. Estado próprio, com
+    # exit 2 (erro de uso/ambiente), nunca 0.
+    inconclusivo = False
+    if args.repo:
+        try:
+            from repo_probe import inconclusive
+            inconclusivo = inconclusive(results)
+        except ImportError:
+            inconclusivo = False
+
     print(f"SCORE={value}")
     print(f"THRESHOLD={threshold}")
-    print(f"GATE={'passed' if gate else 'failed'} (round {round_no}/{cfg['max_rounds']})")
+    if inconclusivo:
+        print("GATE=inconclusive (nada com peso cheio chegou a rodar — veja o que falta instalar)")
+    else:
+        print(f"GATE={'passed' if gate else 'failed'} (round {round_no}/{cfg['max_rounds']})")
     print(f"GAPS={json.dumps(gaps, ensure_ascii=False)}")
     if soft:
         print(f"NON_BLOCKING_GAPS={json.dumps(soft, ensure_ascii=False)}")
     print(f"EVIDENCE={report_path}")
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
+    if inconclusivo:
+        return 2
     return 0 if gate else 1
 
 

@@ -32,7 +32,8 @@ const { spawnSync } = require("node:child_process");
 const DEFAULT_TIMEOUT = 900;
 const MAX_OUTPUT_CHARS = 8000;
 
-const USAGE = `usage: ai-test-loop --config <arquivo.json> [--round N] [--json] [--quiet]
+const USAGE = `usage: ai-test-loop --repo <pasta|url>            monta o teste do projeto sozinho
+       ai-test-loop --config <arquivo.json> [--round N] [--json] [--quiet]
        ai-test-loop --config <arquivo.json> --show-state
        ai-test-loop --config <arquivo.json> --dry-run`;
 
@@ -44,6 +45,7 @@ function die(msg, code = 2) {
 function parseArgs(argv) {
   const out = {
     config: null,
+    repo: null,
     round: null,
     json: false,
     quiet: false,
@@ -57,6 +59,10 @@ function parseArgs(argv) {
       i += 1;
       if (i >= argv.length) die("--config needs a value\n" + USAGE);
       out.config = argv[i];
+    } else if (a === "--repo") {
+      i += 1;
+      if (i >= argv.length) die("--repo needs a path or URL\n" + USAGE);
+      out.repo = argv[i];
     } else if (a === "--round") {
       i += 1;
       const n = Number.parseInt(argv[i], 10);
@@ -237,7 +243,34 @@ function main() {
     process.stdout.write(USAGE + "\n");
     return 0;
   }
-  if (!args.config) die("--config is required\n" + USAGE);
+  if (!args.config && !args.repo) die("--repo <pasta|url> or --config <arquivo.json> is required\n" + USAGE);
+
+  // Modo rápido: sem --config e com --repo, o teste se monta sozinho.
+  let faltando = [];
+  let achados = {};
+  let repoRoot = null;
+  if (args.repo && !args.config) {
+    const probe = require("./repo_probe");
+    repoRoot = probe.prepareRepo(args.repo);
+    const [cfgAuto, falt, ach] = probe.buildConfig(repoRoot, args.repo);
+    faltando = falt;
+    achados = ach;
+    if (!cfgAuto.checks.length) {
+      process.stdout.write("Nenhum teste automático encontrado neste projeto.\n");
+      for (const f of faltando) process.stdout.write(`  não deu para checar ${f.nome}: ${f.motivo}\n`);
+      process.stdout.write("Rode com --config para apontar seus próprios comandos.\n");
+      return 2;
+    }
+    const destino = path.join(probe.cacheDir(path.resolve(repoRoot)), "loop.json");
+    fs.writeFileSync(destino, JSON.stringify(cfgAuto, null, 2));
+    args.config = destino;
+    // O modo rápido é uma foto do projeto AGORA, não uma campanha de rodadas:
+    // reaproveitar o estado faria a segunda execução abortar com "max_rounds
+    // exhausted" (medido 11/11/2026 no runner Python).
+    for (const velho of [".loop-state.json", "loop-report-r1.json"]) {
+      fs.rmSync(path.join(probe.cacheDir(path.resolve(repoRoot)), velho), { force: true });
+    }
+  }
 
   const cfgPath = path.resolve(args.config);
   const cfg = loadConfig(cfgPath);
@@ -294,6 +327,22 @@ function main() {
     results.push(runCheck(chk));
   }
 
+  // Modo rápido: falta de dependência do projeto não é falha do projeto. Só neste
+  // caminho — com --config o usuário declarou o que medir e a falha vale.
+  let probe = null;
+  if (args.repo) {
+    probe = require("./repo_probe");
+    const [mantidos, faltDep] = probe.reclassify(results);
+    if (!mantidos.length) {
+      process.stdout.write("Não deu para verificar nada: faltam dependências deste projeto.\n");
+      for (const f of faltDep) process.stdout.write(`  - ${f.nome}: ${f.motivo}\n`);
+      return 2;
+    }
+    results.length = 0;
+    results.push(...mantidos);
+    faltando = faltando.concat(faltDep);
+  }
+
   const value = score(results);
   const threshold = Number(cfg.threshold);
   const gate = value >= threshold;
@@ -345,13 +394,27 @@ function main() {
     }
   }
 
+  // Resumo em português de gente ANTES do bloco técnico: quem colou o projeto para
+  // "ver se está bom" não é necessariamente programador. SCORE/GAPS continuam abaixo
+  // porque CI e script de terceiro dependem deles.
+  const inconclusivo = probe ? probe.inconclusive(results) : false;
+  if (probe && !args.quiet) {
+    process.stdout.write(probe.humanReport(cfg, faltando, achados, value, gate, results));
+    process.stdout.write("\n");
+  }
+
   process.stdout.write(`SCORE=${value}\n`);
   process.stdout.write(`THRESHOLD=${threshold}\n`);
-  process.stdout.write(`GATE=${gate ? "passed" : "failed"} (round ${roundNo}/${cfg.max_rounds})\n`);
+  if (inconclusivo) {
+    process.stdout.write("GATE=inconclusive (nada com peso cheio chegou a rodar — veja o que falta instalar)\n");
+  } else {
+    process.stdout.write(`GATE=${gate ? "passed" : "failed"} (round ${roundNo}/${cfg.max_rounds})\n`);
+  }
   process.stdout.write(`GAPS=${JSON.stringify(gaps)}\n`);
   if (soft.length) process.stdout.write(`NON_BLOCKING_GAPS=${JSON.stringify(soft)}\n`);
   process.stdout.write(`EVIDENCE=${reportPath}\n`);
   if (args.json) process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+  if (inconclusivo) return 2;
   return gate ? 0 : 1;
 }
 
