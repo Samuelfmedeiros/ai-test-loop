@@ -66,6 +66,7 @@ from datetime import datetime, timezone
 
 DEFAULT_TIMEOUT = 900
 MAX_OUTPUT_CHARS = 8000
+_SHELL: list[str] | None = None
 
 
 def load_config(path: str) -> dict:
@@ -90,15 +91,42 @@ def load_config(path: str) -> dict:
     return cfg
 
 
+def _shell() -> list[str]:
+    """Shell wrapper for one check, decided once per process.
+
+    bash -o pipefail is the strong default: without it `pytest | tail` returns tail's
+    exit code (0) and a failing check scores as passing — the most common false green.
+
+    But hardcoding "bash" crashes on machines that have no bash (minimal containers,
+    alpine, stripped PATH). Measured: FileNotFoundError traceback, not a gate failure.
+    So: bash when available, /bin/sh on POSIX (pipefail lost but the check runs), and
+    cmd.exe on Windows (where bash only exists if Git Bash is installed).
+    """
+    global _SHELL
+    if _SHELL is not None:
+        return _SHELL
+    def works(cmd: str) -> bool:
+        try:
+            return subprocess.run([cmd, "-c", "exit 0"], capture_output=True).returncode == 0
+        except (FileNotFoundError, PermissionError, OSError):
+            return False
+    if os.name == "nt":
+        _SHELL = ["bash", "-o", "pipefail", "-c"] if works("bash") else [
+            os.environ.get("ComSpec", "cmd.exe"), "/d", "/s", "/c"]
+    else:
+        _SHELL = ["bash", "-o", "pipefail", "-c"] if works("bash") else ["/bin/sh", "-c"]
+    return _SHELL
+
+
 def run_check(chk: dict) -> dict:
     """Run one check for real, return its result record with raw evidence."""
     name = chk.get("name") or chk["cmd"][:40]
     timeout = int(chk.get("timeout_s", DEFAULT_TIMEOUT))
     cwd = chk.get("cwd") or None
     expect_exit = int(chk.get("expect_exit", 0))
-    # bash -o pipefail: without it, `pytest | tail` returns tail's exit code (0) and a failing
-    # check scores as passing — the single most common false green in this kind of runner.
-    wrapped = ["bash", "-o", "pipefail", "-c", chk["cmd"]]
+    # bash -o pipefail: sem ele `pytest | tail` devolve o exit code do tail (0) e o check
+    # que falhou pontua como aprovado — o falso verde mais comum deste tipo de runner.
+    wrapped = _shell() + [chk["cmd"]]
     started = time.time()
     timed_out = False
     try:

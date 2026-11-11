@@ -103,14 +103,25 @@ class TestRunReal(unittest.TestCase):
 
 
 class TestPythonAusente(unittest.TestCase):
-    def test_python_inexistente_da_erro_claro(self):
-        """Sem python o usuario precisa saber o que instalar, nao ver stack trace."""
-        rc, out, err = roda("--config", "x.json",
-                            env_extra={"AI_TEST_LOOP_PYTHON": "/caminho/que/nao/existe"})
-        self.assertNotEqual(rc, 0)
+    def test_python_inexistente_nao_impede_o_runner_node(self):
+        """O caminho normal e' o runner Node: sem Python o gate tem que rodar igual.
+
+        O teste antigo exigia a mensagem "Python 3 nao encontrado" com um
+        AI_TEST_LOOP_PYTHON invalido — isso era verdade no 1.0.x, quando o pacote
+        so tinha o runner .py. Depois do port para Node, Python virou fallback
+        legado e o comportamento correto passou a ser: ignora o Python e roda.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = os.path.join(tmp, "loop.json")
+            with open(cfg, "w", encoding="utf-8") as fh:
+                json.dump({"name": "py", "threshold": 85,
+                           "checks": [{"name": "ok", "cmd": "echo ok", "weight": 100}]}, fh)
+            rc, out, err = roda("--config", cfg,
+                                env_extra={"AI_TEST_LOOP_PYTHON": "/caminho/que/nao/existe"})
         juntos = out + err
-        self.assertIn("Python 3", juntos)
-        self.assertIn("AI_TEST_LOOP_PYTHON", juntos)
+        self.assertEqual(rc, 0, juntos[-500:])
+        self.assertIn("SCORE=100.0", juntos, juntos[-500:])
+        self.assertIn("GATE=passed", juntos, juntos[-500:])
 
 
 if __name__ == "__main__":
