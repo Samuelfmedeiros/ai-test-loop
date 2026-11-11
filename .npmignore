@@ -4,3 +4,11 @@ __pycache__/
 *.bak-*
 *.bak
 .git*
+*.egg-info/
+build/
+dist/
+dist-mirror/
+*.tgz
+ai_test_loop/
+pyproject.toml
+MANIFEST.in

@@ -8,3 +8,10 @@ loop.json
 
 # backups locais de edicao (nao versionar)
 *.bak-*
+
+# build de pacote Python (nunca versionar)
+*.egg-info/
+build/
+dist/
+dist-mirror/
+*.tgz

@@ -1,7 +1,7 @@
 {
   "name": "ai-test-loop",
-  "version": "1.0.5",
-  "description": "Deterministic critic for AI agents: runs weighed checks for real, scores 0-100 and blocks delivery below the threshold. Stdlib-only runner.",
+  "version": "1.1.0",
+  "description": "Deterministic critic for AI agents: runs weighed checks for real, scores 0-100 and blocks delivery below the threshold. Zero dependencies, runs on Node (npx) or Python (pip).",
   "license": "MIT",
   "author": "Samuel Medeiros",
   "homepage": "https://skills.seu.pet/en/p/ai-test-loop?utm_source=npm&utm_medium=readme&utm_campaign=ai-test-loop",
@@ -10,12 +10,18 @@
     "url": "git+https://github.com/Samuelfmedeiros/ai-test-loop.git"
   },
   "keywords": [
+    "mcp",
+    "ai-agent",
     "ai-agents",
+    "llm",
+    "testing",
     "test-loop",
     "quality-gate",
+    "delivery-gate",
     "critic",
-    "llm",
     "claude-code",
+    "cursor",
+    "code-review",
     "codex"
   ],
   "bin": {
@@ -28,13 +34,12 @@
     "references/",
     "SKILL.md",
     "README.md",
-    "LICENSE",
-    "tests/"
+    "LICENSE"
   ],
   "engines": {
     "node": ">=16"
   },
   "scripts": {
-    "test": "python3 tests/test_cli.py"
+    "test": "node scripts/selftest.js"
   }
 }

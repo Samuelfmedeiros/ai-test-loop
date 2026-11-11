@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+# Espelho aposentado. O nome canônico do produto é `ai-test-loop` (npm, PyPI, GitHub,
+# README). Este pacote existe só para não quebrar quem já tem `pip install agent-test-loop`
+# em script, CI ou requirements.txt — e é por isso que ele NÃO embute código: declara o
+# canônico como dependência e repropaga o comando com o nome antigo.
+name = "agent-test-loop"
+version = "1.1.0"
+description = "DEPRECATED — use ai-test-loop. Mirror that keeps `pip install agent-test-loop` working."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Samuel Medeiros" }]
+keywords = [
+    "mcp", "ai-agent", "ai-agents", "llm", "testing", "test-loop",
+    "quality-gate", "delivery-gate", "critic", "claude-code", "cursor", "code-review",
+]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = ["ai-test-loop>=1.1.0"]
+
+[project.urls]
+Homepage = "https://skills.seu.pet/en/p/ai-test-loop?utm_source=pypi-mirror&utm_medium=readme&utm_campaign=ai-test-loop"
+Repository = "https://github.com/Samuelfmedeiros/ai-test-loop"
+Changelog = "https://github.com/Samuelfmedeiros/ai-test-loop/releases"
+
+[project.scripts]
+# O comando antigo continua funcionando: aponta para o entry point do pacote canônico.
+agent-test-loop = "ai_test_loop.__main__:main"
+
+[tool.setuptools]
+# Vazio de propósito: o código vive no pacote canônico, que é dependência.
+packages = []

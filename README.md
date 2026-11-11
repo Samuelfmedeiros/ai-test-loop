@@ -1,28 +1,56 @@
 # ai-test-loop
 
-**Your agent is grading its own homework.** This makes it impossible: a critic script runs real
-checks, scores the artifact 0–100, loops until the threshold is met, and a fail-closed gate blocks
-delivery on security findings.
+**Your agent grades its own homework.** This makes that impossible: a critic script runs real checks,
+scores the artifact 0–100, and a fail-closed gate blocks delivery below the threshold.
 
-![loop](https://github.com/Samuelfmedeiros/ai-test-loop/actions/workflows/loop.yml/badge.svg)
+```bash
+npx ai-test-loop --config loop.json     # zero install, no Python needed
+```
 
-No API keys, no dependencies, no model calls. `loop_runner.py` is deliberately dumb: exit codes and
+Real output, not a mockup:
+
+```
+  PASS  unit tests                   w=40     12.4s  41 passed in 12.31s
+  FAIL  build                        w=20      3.1s  error TS2307: Cannot find module './api'
+  PASS  no secrets                   w=15      0.8s  no leaks found
+SCORE=75.0
+GATE=failed (round 1/8)
+GAPS=["build: exit code 2, expected 0"]
+```
+
+> **Want this wired into your repo, with the visual-diff gate and the delivery report?**
+> The ready-made packs are at **https://skills.seu.pet/en/p/pack-completo?utm_source=npm&utm_medium=readme&utm_campaign=ai-test-loop**
+> — or grab the free runner first and see if the loop earns its place.
+
+No API keys, no dependencies, no model calls. The runner is deliberately dumb: exit codes and
 optional output patterns decide pass/fail. The model never gets to *say* the work is good — it has
 to *show* it.
 
-> **Quer isso pronto para o seu time?** Os packs com entrega por e-mail, o gate com relatório
-> e o guia de verificação estão em **https://skills.seu.pet/gratis/ai-test-loop?utm_source=github&utm_medium=readme&utm_campaign=ai-test-loop**
-
 ---
 
-## Install as a package
+## Install
+
+Same package name everywhere. Both registries, same name:
 
 ```bash
-pip install agent-test-loop
-agent-test-loop --config loop.json --dry-run
+npx ai-test-loop --help          # Node 18+ — nothing to install
+pip install ai-test-loop         # Python 3.9+ — same engine (PyPI)
 ```
 
-PyPI: https://pypi.org/project/agent-test-loop/
+`npx` is the fastest path: it downloads and runs in about five seconds, no virtualenv, no Python.
+The npm package carries a Node port of the runner; the PyPI package carries the Python one. Both
+print the same `SCORE=` / `GAPS=` / `EVIDENCE=` contract, so the gate you run locally is the gate CI
+runs.
+
+Verify with a dry run — it lists the checks and weights without executing anything:
+
+```bash
+npx ai-test-loop --config templates/loop.example.json --dry-run
+```
+
+> Older docs and articles mention `pip install agent-test-loop`. That is the previous PyPI name and
+> still works — it is the same engine, kept as a mirror so existing installs do not break. New code
+> should use `ai-test-loop`.
 
 ## The problem
 
@@ -38,34 +66,15 @@ the artifact also decides it is correct, so real defects survive to delivery:
 Running "one more review pass" does not help, because the reviewer and the builder are the same
 process. Separating them is the whole trick.
 
-## Install
-
-Two packages, same engine — pick the ecosystem you already have:
-
-```bash
-pip install agent-test-loop     # Python 3.9+  (PyPI)
-npx ai-test-loop --help         # Node 18+    (npm)
-```
-
-Both ship the same `loop_runner.py` and the same example config, so the gate you run locally is the
-gate CI runs. Verify with a dry run — it prints the checks and weights without executing anything:
-
-```bash
-agent-test-loop --config templates/loop.example.json --dry-run
-npx ai-test-loop --config templates/loop.example.json --dry-run
-```
-
-Need the full QA gate — visual diff, training guard, delivery evidence — instead of the free runner?
-See the [full pack](https://skills.seu.pet/p/pack-completo?utm_source=github&utm_medium=readme&utm_campaign=ai-test-loop).
-
 ## Quickstart
 
 ```bash
-git clone https://github.com/Samuelfmedeiros/ai-test-loop
-cd ai-test-loop
+npx ai-test-loop --config loop.json
+```
 
-# 1. describe your checks (name, command, weight — weights sum to 100)
-cat > loop.json <<'JSON'
+Describe your checks once — name, command, weight:
+
+```json
 {
   "name": "my-project",
   "threshold": 85,
@@ -80,25 +89,39 @@ cat > loop.json <<'JSON'
      "fail_if_output_matches": "leaks found: [1-9]", "required": true}
   ]
 }
-JSON
-
-# 2. run the critic
-python3 scripts/loop_runner.py --config loop.json
 ```
 
 Output is machine-readable, so the *agent* can act on it and a CI job can gate on it:
 
 ```
-SCORE=72
-GAPS=["build: command exited 1", "api up: output did not match pattern"]
-EVIDENCE=.loop/report-1.json
+SCORE=75.0
+THRESHOLD=85
+GATE=failed (round 1/8)
+GAPS=["build: exit code 2, expected 0"]
+EVIDENCE=loop-report-r1.json
 ```
+
+Exit code is `0` when the gate passes and `1` when it fails — so `npx ai-test-loop --config
+loop.json` is a valid CI step on its own, with no parsing.
 
 Fix the **single largest** gap, run `--round 2`, repeat. Cap the rounds (8 is plenty): if the score
 never converges, the check set is wrong, not the code.
 
-A self-contained demo lives in `examples/demo` and runs in CI on every push, so you can see a real
-pass and a real fail without configuring anything.
+## Config reference
+
+| Key | Meaning |
+|---|---|
+| `cmd` | (required) shell command, run with `bash -o pipefail -c` |
+| `weight` | (required) points; weights are normalised, they need not sum to 100 |
+| `timeout_s` | default 900 — a timeout is a **FAIL**, never a skip |
+| `expect_exit` | default 0 |
+| `must_match` | regex that must appear in the combined stdout+stderr |
+| `fail_if_output_matches` | regex that fails the check when it appears |
+| `required` | default `true`; `false` scores 0 but reports as a non-blocking gap |
+| `cwd` | working directory for that check |
+
+`bash -o pipefail` is not decoration: without it `pytest | tail` returns tail's exit code (0), so a
+failing suite scores as passing. That is the most common false green in runners like this one.
 
 ## The four roles (never merge them)
 
@@ -113,8 +136,8 @@ Rule zero: builder ≠ critic ≠ reviewer. If one context does all three, the l
 
 ## Three rules that make it honest
 
-1. **Every point is earned by a command that actually ran.** No points for "read the code". Weights
-   sum to 100 and the report stores the raw output next to each score.
+1. **Every point is earned by a command that actually ran.** No points for "read the code". The
+   report stores the raw output next to each score.
 2. **`NOT VERIFIABLE` is not a pass.** If a check cannot run (missing device, no network, jail), it
    scores 0 and the report says why. Silent skips are how a green board lies.
 3. **The security gate is fail-closed.** A secret in the diff or history, a high-severity SAST
@@ -137,19 +160,16 @@ Consensus → deliver. Majority disagree → reopen the loop with the combined g
 ## Telemetry (opt-out, and what it is not)
 
 The `npx ai-test-loop` wrapper sends **one anonymous event per run** so the project knows whether
-the tool is actually used — downloads alone are not usage (npm counts mirrors and CI, and the
-publish-day spike was 270 of 555 downloads in a month).
+the tool is actually used — downloads alone are not usage (npm counts mirrors and CI).
 
-What is sent: event type (`run`/`help`/`version`/`erro`), package version, Node major, Python major,
-OS name, duration in ms, and — only on a real run — the final score and the number of gaps.
+What is sent: event type (`run`/`help`/`version`/`erro`), package version, Node major, OS name,
+duration in ms, and — only on a real run — the final score and the number of gaps.
 
 What is **never** sent: your IP (not logged server-side), e-mail, project path, file names, the
 content of your checks, the command output, or anything from your code.
 
 The install id is a random UUID written to `~/.ai-test-loop/telemetry-id` once. It counts machines,
-not people, and is not linked to anything else. Delete that file and you are a new machine.
-
-Turn it off however you prefer:
+not people. Delete that file and you are a new machine.
 
 ```bash
 ai-test-loop --no-telemetry ...          # that run only
@@ -158,8 +178,7 @@ export DO_NOT_TRACK=1                    # the ecosystem-wide convention, also r
 # CI=1 is detected automatically: pipelines are not people
 ```
 
-Telemetry never blocks and never waits: if the network is down the CLI runs exactly the same, with
-no delay and no message.
+Telemetry never blocks and never waits: if the network is down the CLI runs exactly the same.
 
 ## When not to use it
 
@@ -170,21 +189,26 @@ cost of being wrong. It is for artifacts a human will rely on.
 
 | Path | What |
 |---|---|
+| `bin/cli.js` | the `npx` entry point (wrapper + telemetry) |
+| `scripts/loop_runner.js` | the deterministic critic, Node port — zero dependencies |
+| `scripts/loop_runner.py` | the same critic in Python (used by the pip package) |
+| `scripts/selftest.js` | 22 assertions covering every way a check can fail — `npm test` |
 | `SKILL.md` | the loop, the scoring rules, the fail-closed gate — drop it in your agent's skills dir |
-| `scripts/loop_runner.py` | the deterministic critic (stdlib only) |
 | `references/reviewer-prompt.md` | independent-review prompt, strict JSON output |
 | `references/scoring-rubric.md` | starting weights |
 | `templates/loop.example.json` | config with the usual check set |
-| `examples/demo/` | self-contained example used by CI |
+
+`npm test` runs the selftest. It needs nothing but node.
 
 ## Get the full pack
 
 This repo is the free, complete tool. The store has the ready-made packs for the cases where
 writing the checks is the slow part — CI gates, visual regression, MCP servers, MLOps guards:
 
-- Free download / e-mail delivery: **https://skills.seu.pet/gratis/ai-test-loop?utm_source=github&utm_medium=readme&utm_campaign=ai-test-loop**
-- Catalog: **https://skills.seu.pet/?utm_source=github&utm_medium=readme&utm_campaign=ai-test-loop**
-- Want it installed and wired into your repo: **https://skills.seu.pet/servico?utm_source=github&utm_medium=readme&utm_campaign=ai-test-loop**
+- Free download / e-mail delivery: **https://skills.seu.pet/gratis/ai-test-loop?utm_source=npm&utm_medium=readme&utm_campaign=ai-test-loop**
+- Full pack: **https://skills.seu.pet/en/p/pack-completo?utm_source=npm&utm_medium=readme&utm_campaign=ai-test-loop**
+- Catalog: **https://skills.seu.pet/?utm_source=npm&utm_medium=readme&utm_campaign=ai-test-loop**
+- Want it installed and wired into your repo: **https://skills.seu.pet/servico?utm_source=npm&utm_medium=readme&utm_campaign=ai-test-loop**
 
 ## License
 
@@ -195,7 +219,11 @@ MIT — see `LICENSE`. Use it commercially, fork it, ship it.
 ### Em português
 
 O loop de teste para agentes: o construtor não assina o próprio trabalho. Um crítico roda checagens
-de verdade, dá nota 0–100, repete até o limite e barra a entrega se houver achado de segurança.
-`python3 scripts/loop_runner.py --config loop.json` — sem chave de API e sem dependência.
+de verdade, dá nota 0–100 e barra a entrega abaixo do limite.
 
-Versão com entrega por e-mail e os packs prontos: https://skills.seu.pet/gratis/ai-test-loop?utm_source=github&utm_medium=readme&utm_campaign=ai-test-loop
+```bash
+npx ai-test-loop --config loop.json   # não precisa de Python
+```
+
+Sem chave de API, sem dependência, sem chamada de modelo. Versão com entrega por e-mail e os packs
+prontos: https://skills.seu.pet/gratis/ai-test-loop?utm_source=npm&utm_medium=readme&utm_campaign=ai-test-loop

@@ -1,0 +1,2 @@
+include README.md LICENSE
+include ai_test_loop/scripts/*.py
