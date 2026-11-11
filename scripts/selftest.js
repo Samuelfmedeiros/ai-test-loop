@@ -177,6 +177,31 @@ console.log("cli — run real ponta a ponta");
   check("SCORE=100.0 pelo cli", campo(out, "SCORE") === "100.0", campo(out, "SCORE"));
 }
 
+console.log("shell — sem bash no PATH nao cai para cmd.exe no POSIX");
+{
+  // Reproduz o ambiente magro que quebrou o 1.1.0: PATH sem bash e sem python.
+  // No Linux/macOS o runner tem de usar /bin/sh; cair em cmd.exe faz TODO check
+  // falhar com "spawnSync cmd.exe ENOENT" e o gate reprova o usuario inocente.
+  const cfgPath = path.join(dir, "noshell.json");
+  fs.writeFileSync(cfgPath, JSON.stringify({
+    name: "noshell", threshold: 85,
+    checks: [{ name: "ok", cmd: "echo sem-bash", weight: 100 }],
+  }), "utf8");
+  const magro = path.join(dir, "magro");
+  fs.mkdirSync(magro, { recursive: true });
+  fs.symlinkSync(process.execPath, path.join(magro, "node"));
+  if (process.platform !== "win32") {
+    const out = execFileSync(process.execPath, [cli, "--config", cfgPath], {
+      encoding: "utf8",
+      env: { PATH: magro, HOME: dir, AI_TEST_LOOP_NO_TELEMETRY: "1", TERM: "dumb" },
+    });
+    check("POSIX sem bash: check roda", campo(out, "SCORE") === "100.0", campo(out, "SCORE"));
+    check("POSIX sem bash: gate passa", campo(out, "GATE").startsWith("passed"), campo(out, "GATE"));
+  } else {
+    check("POSIX sem bash: n/a no Windows", true, "skip");
+  }
+}
+
 fs.rmSync(dir, { recursive: true, force: true });
 console.log(falhas === 0 ? "\nTUDO OK" : `\n${falhas} FALHA(S)`);
 process.exit(falhas === 0 ? 0 : 1);

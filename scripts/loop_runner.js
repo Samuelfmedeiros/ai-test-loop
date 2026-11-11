@@ -112,12 +112,21 @@ let _shell = null;
 function shellFor() {
   if (_shell) return _shell;
   const probe = spawnSync("bash", ["-c", "exit 0"], { stdio: "ignore" });
-  if (probe.status === 0) {
-    _shell = { cmd: "bash", prefix: ["-o", "pipefail", "-c"], pipefail: true };
-  } else {
-    const comspec = process.env.ComSpec || "cmd.exe";
-    _shell = { cmd: comspec, prefix: ["/d", "/s", "/c"], pipefail: false };
+
+  if (process.platform === "win32") {
+    // Windows has no bash by default: use it when present (Git Bash / WSL), otherwise
+    // cmd.exe and say so, instead of silently dropping pipefail semantics.
+    _shell = probe.status === 0
+      ? { cmd: "bash", prefix: ["-o", "pipefail", "-c"], pipefail: true }
+      : { cmd: (process.env.ComSpec || "cmd.exe"), prefix: ["/d", "/s", "/c"], pipefail: false };
+    return _shell;
   }
+
+  // POSIX: never fall back to cmd.exe. Without bash (minimal containers, stripped PATH)
+  // use /bin/sh, which is guaranteed by POSIX — it just cannot honour pipefail.
+  _shell = probe.status === 0
+    ? { cmd: "bash", prefix: ["-o", "pipefail", "-c"], pipefail: true }
+    : { cmd: "/bin/sh", prefix: ["-c"], pipefail: false };
   return _shell;
 }
 
