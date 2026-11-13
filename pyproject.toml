@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 # em script, CI ou requirements.txt — e é por isso que ele NÃO embute código: declara o
 # canônico como dependência e repropaga o comando com o nome antigo.
 name = "agent-test-loop"
-version = "1.1.2"
+version = "1.2.0"
 description = "DEPRECATED — use ai-test-loop. Mirror that keeps `pip install agent-test-loop` working."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -40,3 +40,34 @@ agent-test-loop = "ai_test_loop.__main__:main"
 [tool.setuptools]
 # Vazio de propósito: o código vive no pacote canônico, que é dependência.
 packages = []
+
+[tool.mutmut]
+# Alvo: gate_core.py (262 linhas), NAO loop_runner.py (864 linhas).
+# Medido 12/11/2026: o mutmut expande o modulo para 22 MB e compilar o arquivo
+# mutado leva >180s — a rodada de 1827 mutantes nunca terminava (3 tentativas
+# mortas: timeout 600, timeout 1500, restart do gateway). O core extraido tem as
+# funcoes que de fato decidem bloqueio (score, fingerprints, migracao, validacao,
+# parsing de resultado) e compila em milissegundos.
+source_paths = ["scripts/gate_core.py"]
+# Somente os arquivos que IMPORTAM o modulo. Os outros 9 chamam loop_runner.py por
+# subprocess e, dentro de mutants/, o runner nao acha a config do mutmut: o mutante
+# morreria por erro de ambiente e o score mediria o sandbox, nao os testes.
+pytest_add_cli_args_test_selection = [
+    "tests/test_gate_parsing.py",
+    "tests/test_unit_gate.py",
+    "tests/test_gate_core_paridade.py",
+    "tests/test_fingerprint_schema.py",
+    "tests/test_severidade_mapa.py",
+]
+do_not_mutate = ["mutants/*"]
+also_copy = [
+    # data/ tem o mapa de severidade lido por tests/test_severidade_mapa.py —
+    # sem ele o mutmut nao consegue rodar a suite dentro de mutants/ e aborta
+    # com "failed to collect stats" (medido no CI 12/11/2026: 0/452 mortos).
+    "data/",
+    "scripts/loop_runner.py",
+    "scripts/loop_runner.js",
+    "scripts/repo_probe.py",
+    "scripts/repo_probe.js",
+    "examples/",
+]
