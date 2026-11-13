@@ -140,6 +140,11 @@ function loadConfig(cfgPath) {
   });
   if (cfg.threshold === undefined) cfg.threshold = 85;
   if (cfg.max_rounds === undefined) cfg.max_rounds = 8;
+  // 13/11/2026 — paridade com o runner Python: chave presente com `null` nao e
+  // coberta por `=== undefined` e estourava em Number(null) => 0, aprovando
+  // tudo (score >= 0). Normaliza explicitamente.
+  if (cfg.threshold === null) cfg.threshold = 85;
+  if (cfg.max_rounds === null) cfg.max_rounds = 8;
   // strict_tests liga a policia anti-cheat em TODOS os checks.
   if (cfg.strict_tests) {
     checks.forEach((chk) => {

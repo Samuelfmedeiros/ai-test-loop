@@ -137,6 +137,14 @@ def load_config(path: str) -> dict:
             sys.exit(f"[loop_runner] check {chk.get('name', i)!r} needs a positive 'weight'")
     cfg.setdefault("name", os.path.basename(os.path.dirname(os.path.abspath(path))) or "loop")
     cfg.setdefault("threshold", 85)
+    # 13/11/2026 — `setdefault` NAO substitui chave existente com valor nulo:
+    # `"threshold": null` passava o default e estourava em `float(None)` na hora
+    # do gate, com traceback em vez de erro de config legivel. Medido por
+    # exploit: exit 1 + TypeError, sem dizer qual chave. Normaliza aqui.
+    if cfg.get("threshold") is None:
+        cfg["threshold"] = 85
+    if cfg.get("max_rounds") is None:
+        cfg["max_rounds"] = 8
     cfg.setdefault("max_rounds", 8)
     # Ambiguidade de gate e erro de config, nao aviso: `required: true` sem
     # `severity` deixa o check bloqueante ou so pontuavel a depender de quem le.
