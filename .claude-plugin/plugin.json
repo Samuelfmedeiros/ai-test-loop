@@ -1,0 +1,21 @@
+{
+  "name": "ai-test-loop",
+  "version": "1.2.1",
+  "description": "Independent critic that scores an agent's work 0-100 with real checks and blocks delivery below the threshold.",
+  "author": {
+    "name": "Samuel Medeiros",
+    "url": "https://skills.seu.pet"
+  },
+  "homepage": "https://skills.seu.pet/en/p/ai-test-loop?utm_source=claude-code&utm_medium=plugin&utm_campaign=ai-test-loop",
+  "repository": "https://github.com/Samuelfmedeiros/ai-test-loop",
+  "license": "MIT",
+  "keywords": [
+    "testing",
+    "quality-gate",
+    "delivery-gate",
+    "critic",
+    "claude-code",
+    "cursor",
+    "codex"
+  ]
+}

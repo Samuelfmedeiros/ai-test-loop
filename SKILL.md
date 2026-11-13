@@ -28,7 +28,13 @@ Run steps 1-3 below in the working session, then drive the script for the machin
 
 1. **Declare the checks before writing code.** For each check: name, command, weight, and what
    "pass" means. Weights must sum to 100.
-2. **Run the critic** — `python scripts/loop_runner.py --config loop.json --round N`. It executes
+2. **Run the critic** — `python "${CLAUDE_SKILL_DIR}/scripts/loop_runner.py" --config loop.json --round N`.
+   `${CLAUDE_SKILL_DIR}` is the directory holding this `SKILL.md`, so the path works from the
+   project root, a subdirectory, or anywhere else the session happens to be. A bare
+   `python scripts/loop_runner.py` only resolves when the shell is inside the skill folder —
+   it fails with `No such file or directory` from the project, which is the normal cwd.
+   Outside Claude Code, substitute the skill's absolute path or use `npx ai-test-loop`.
+   It executes
    every command for real, records raw output as evidence, and prints `SCORE=<0-100>` and
    `GAPS=[...]`. It never asks a model whether the work is good; it measures.
 3. **Score, compare, decide.** `SCORE >= threshold` → go to the reviewer. Otherwise pick the

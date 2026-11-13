@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "skills-seu-pet",
+  "owner": {
+    "name": "Samuel Medeiros",
+    "url": "https://skills.seu.pet"
+  },
+  "description": "Skills testadas para agentes de código: gate de QA, preflight de MCP, diff visual e guard de treino longo.",
+  "version": "1.0.0",
+  "plugins": [
+    {
+      "name": "ai-test-loop",
+      "source": "./",
+      "description": "Independent critic that scores an agent's work 0-100 with real checks and blocks delivery below the threshold.",
+      "version": "1.2.1",
+      "author": {
+        "name": "Samuel Medeiros",
+        "url": "https://skills.seu.pet"
+      },
+      "homepage": "https://skills.seu.pet/en/p/ai-test-loop?utm_source=claude-code&utm_medium=plugin&utm_campaign=ai-test-loop",
+      "license": "MIT",
+      "keywords": [
+        "testing",
+        "quality-gate",
+        "delivery-gate",
+        "critic",
+        "claude-code",
+        "cursor",
+        "codex"
+      ]
+    }
+  ]
+}

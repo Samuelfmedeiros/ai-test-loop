@@ -7,6 +7,13 @@ scores the artifact 0–100, and a fail-closed gate blocks delivery below the th
 npx ai-test-loop --config loop.json     # zero install, no Python needed
 ```
 
+**Using Claude Code?** Install it as a plugin — the skill loads automatically
+when the agent is about to declare work done:
+
+```
+/plugin install ai-test-loop --marketplace Samuelfmedeiros/ai-test-loop
+```
+
 **Just want a score for your project?** Paste the path or the GitHub URL — no config file:
 
 ```bash
