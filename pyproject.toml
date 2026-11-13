@@ -61,6 +61,10 @@ pytest_add_cli_args_test_selection = [
 ]
 do_not_mutate = ["mutants/*"]
 also_copy = [
+    # data/ tem o mapa de severidade lido por tests/test_severidade_mapa.py —
+    # sem ele o mutmut nao consegue rodar a suite dentro de mutants/ e aborta
+    # com "failed to collect stats" (medido no CI 12/11/2026: 0/452 mortos).
+    "data/",
     "scripts/loop_runner.py",
     "scripts/loop_runner.js",
     "scripts/repo_probe.py",

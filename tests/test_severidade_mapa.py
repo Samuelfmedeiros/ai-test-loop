@@ -6,8 +6,10 @@ o mapa para que a classificação não vire prosa: cada classe bloqueante PRECIS
 casar gaps que os critics realmente emitem, e as classes de aviso NÃO podem
 bloquear.
 
-Fonte do mapa: `~/.hermes/scripts/mapa-severidade-62-critics.json`, gerado a
-partir dos 129 gap literais de `gaps.append(...)` nos critics usados.
+Fonte do mapa: `data/mapa-severidade-62-critics.json` (versionado junto com o repo,
+para o teste rodar em qualquer maquina — inclusive no CI, que nao tem ~/.hermes).
+O override por env `ROGER_SEV_MAP` continua valendo para apontar ao mapa vivo do
+orquestrador durante a varredura de uma maquina especifica.
 """
 import json
 import os
@@ -15,8 +17,13 @@ import re
 import sys
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MAPA_PADRAO = os.path.expanduser(
-    "~/.hermes/profiles/ajudante/state/mapa-severidade-62-critics.json")
+# Fallback em cadeia: o mapa VERSIONADO no repo (portavel, roda no CI) primeiro;
+# o caminho do perfil so como ultimo recurso de quem roda na maquina do dono.
+_CANDIDATOS = [
+    os.path.join(RAIZ, "data", "mapa-severidade-62-critics.json"),
+    os.path.expanduser("~/.hermes/profiles/ajudante/state/mapa-severidade-62-critics.json"),
+]
+MAPA_PADRAO = next((c for c in _CANDIDATOS if os.path.isfile(c)), _CANDIDATOS[0])
 
 
 def _carrega():
