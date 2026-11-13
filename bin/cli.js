@@ -83,6 +83,24 @@ function modoDe(args) {
   return "run";
 }
 
+// --quiet prometia na ajuda ("só SCORE/GAPS/EVIDENCE") e nunca foi lido no código.
+// Agora ele desliga o convite final — é o modo de quem roda em CI/script.
+const QUIET = argv.includes("--quiet");
+
+// Convite no fim da execução: o único canal com volume real (1.208 downloads/semana
+// no npm, medido 13/11/2026) terminava em `EVIDENCE=` sem nenhum próximo passo.
+// Regras: só em terminal interativo (nunca em CI/pipe, onde viraria ruído de log),
+// nunca com --quiet/--no-telemetry, e uma linha só — não é anúncio, é saída de comando.
+function convite(score) {
+  if (QUIET || !process.stdout.isTTY) return;
+  if (process.env.CI || process.env.AI_TEST_LOOP_NO_TELEMETRY === "1") return;
+  const nota = score ? `Nota ${score}/100. ` : "";
+  console.log(
+    `\n${nota}Quer isso travando entrega de verdade (gate + diff visual + relatório)? ` +
+    `https://skills.seu.pet/p/ai-test-loop?utm_source=cli&utm_medium=footer&utm_campaign=ai-test-loop\n`
+  );
+}
+
 function enviar(payload) {
   // Devolve Promise: `process.exit()` mata o processo antes do POST terminar, e o evento se
   // perdia (medido 08/11: dry-run não gravava nada). Quem chama espera com `.finally`.
@@ -228,6 +246,7 @@ if (!saiAntesDoRunner) {
 
     p.on("error", () => tentar(i + 1));
     p.on("exit", (code, signal) => {
+      convite(saidaScore);
       enviar(Object.assign(base(code === 0 ? "run" : "erro", modo), {
         duracao_ms: Date.now() - inicio,
         score: saidaScore || undefined,
