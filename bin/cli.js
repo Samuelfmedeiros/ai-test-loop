@@ -129,6 +129,7 @@ const AJUDA = `
 ai-test-loop — nota 0-100 no seu agente antes de entregar.
 
 USO
+  ai-test-loop --repo <pasta|url>            JEITO RÁPIDO: cola o projeto e sai a nota
   ai-test-loop --config <arquivo.json>       roda as checagens e imprime a nota
   ai-test-loop --config <arq> --dry-run      mostra o que rodaria, sem executar
   ai-test-loop --config <arq> --quiet        só SCORE/GAPS/EVIDENCE
@@ -138,6 +139,13 @@ USO
   ai-test-loop --help                        esta ajuda
 
 PRIMEIRA VEZ
+  Sem config nenhuma, cole a pasta ou o endereço do projeto:
+    npx ai-test-loop@latest --repo ./meu-projeto
+    npx ai-test-loop@latest --repo https://github.com/usuario/projeto
+  Ele detecta a linguagem, escolhe as checagens e dá a nota. Se faltar ferramenta,
+  diz "não deu para checar" em vez de reprovar, e sai com código 2 quando nada rodou.
+
+  Para controlar as checagens você mesmo:
   1. copie a config de exemplo:   npx ai-test-loop@latest --config loop.example.json --dry-run
   2. declare suas checagens (nome, comando, peso, o que significa passar)
   3. rode sem --dry-run e receba a nota, com os gaps que faltam

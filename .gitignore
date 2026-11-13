@@ -15,3 +15,7 @@ build/
 dist/
 dist-mirror/
 *.tgz
+
+# mutation testing (mutmut 3): arvore expandida de 20MB+ e cache local
+mutants/
+.mutmut-cache

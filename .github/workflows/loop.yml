@@ -43,3 +43,66 @@ jobs:
           name: loop-evidence
           path: .loop/*.json
           if-no-files-found: ignore
+
+  # Mutation testing do PROPRIO critico (12/11/2026). O meta-gate prova que UM caso
+  # passa; nao prova que a suite pega regressao no runner. Mutar loop_runner.py e
+  # exigir que os testes matem os mutantes mede a forca real dos testes do gate.
+  # Piso 70% — abaixo disso o teste existe mas nao protege.
+  # Muta gate_core.py (262 linhas, 452 mutantes, ~20s), NAO loop_runner.py (864
+  # linhas). Medido 12/11/2026: o mutmut expande o modulo de origem para 22 MB e
+  # compilar o arquivo mutado leva >180s — a rodada de 1827 mutantes nunca terminava
+  # (3 tentativas mortas por timeout/restart). O core tem as funcoes que decidem
+  # bloqueio e o score medido e 78,1% (353/452).
+  mutation:
+    runs-on: ubuntu-latest
+    needs: critic
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar mutmut
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install mutmut pytest
+
+      - name: Matar os mutantes do gate_core.py
+        run: |
+          set +e
+          python3 -m mutmut run 2>&1 | tail -40
+          rc=$?
+          set -e
+          python3 -m mutmut results || true
+
+      - name: Verificar piso de 70%
+        run: |
+          python3 -m mutmut export-cicd-stats 2>/dev/null || true
+          python3 - <<'EOF'
+          import json, pathlib, sys
+          p = pathlib.Path("mutants/mutmut-cicd-stats.json")
+          if not p.exists():
+              print("::error::mutmut nao gerou estatisticas — medicao ausente nao e aprovacao")
+              sys.exit(1)
+          d = json.loads(p.read_text())
+          killed = d.get("killed", 0)
+          total = d.get("total", 0)
+          if total == 0:
+              print("::error::nenhum mutante gerado — o alvo do mutmut sumiu")
+              sys.exit(1)
+          pct = 100.0 * killed / total
+          print(f"mutantes: {killed}/{total} mortos = {pct:.1f}%")
+          if pct < 70.0:
+              print(f"::error::mutation score {pct:.1f}% abaixo do piso de 70% "
+                    f"— os testes do gate nao pegam regressao")
+              sys.exit(1)
+          print("ok: piso de 70% atingido")
+          EOF
+
+      - name: Evidencia da mutacao
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-evidence
+          path: mutants/mutmut-cicd-stats.json
+          if-no-files-found: ignore
