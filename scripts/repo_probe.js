@@ -361,4 +361,27 @@ function prepareRepo(target) {
   return dest;
 }
 
-module.exports = { buildConfig, cacheDir, prepareRepo, reclassify, inconclusive, humanReport };
+// Convite discreto ao fim do relatório. Espelha `convite()` do repo_probe.py: o pacote
+// tem ~1284 downloads/semana via npm e 28 cliques na loja em 30 dias — quem roda `npx`
+// nunca abre o README e por isso nunca descobre a versão paga.
+//
+// Silêncio obrigatório em CI e quando a pessoa pediu saída limpa (NO_COLOR). Propaganda
+// em log de pipeline quebra contrato; uma linha no terminal de quem rodou é aceitável.
+const LOJA_URL =
+  "https://skills.seu.pet/en/p/ai-test-loop" +
+  "?utm_source=cli&utm_medium=rodape&utm_campaign=ai-test-loop";
+
+function convite() {
+  for (const v of [
+    "ATL_NO_CTA", "NO_COLOR", "CI", "CONTINUOUS_INTEGRATION",
+    "BUILD_NUMBER", "GITHUB_ACTIONS", "GITLAB_CI", "JENKINS_URL",
+  ]) {
+    if (process.env[v]) return "";
+  }
+  return (
+    "  Gostou do que viu? O pack com o gate, o diff visual e o guard de " +
+    `treino sai junto: ${LOJA_URL}`
+  );
+}
+
+module.exports = { buildConfig, cacheDir, prepareRepo, reclassify, inconclusive, humanReport, convite };

@@ -148,5 +148,59 @@ class TestSaidaLegivel(unittest.TestCase):
         self.assertIn("NÃO é uma nota baixa", txt)
 
 
+class TestConviteERelatorioSemVarredura(unittest.TestCase):
+    """O convite do rodapé e o relatório quando não houve varredura de segurança.
+
+    Dois defeitos medidos em 14/11/2026 no mesmo trecho:
+
+    1. `human_report` estourava `KeyError: 'segredos'` quando o runner vem de
+       `--config` (nesse caminho `achados` é `{}` e não tem as chaves da
+       varredura). Rodava tudo, calculava nota e morria antes de imprimir.
+    2. O pacote tinha 1284 downloads/semana e 28 cliques na loja em 30 dias:
+       quem instala pelo terminal nunca vê o README. O convite só existe se for
+       silencioso em CI — propaganda em log de pipeline quebra contrato.
+    """
+
+    def test_relatorio_nao_quebra_sem_varredura_de_seguranca(self):
+        cfg = {"name": "x", "threshold": 60, "checks": []}
+        txt = repo_probe.human_report("/tmp", cfg, [], {}, 100.0, True,
+                                      [{"name": "soma", "passed": True,
+                                        "required": False, "evidence": "ok"}])
+        self.assertIn("Nota", txt)
+
+    def test_convite_aparece_no_uso_normal(self):
+        salvo = {k: os.environ.pop(k, None) for k in
+                 ("ATL_NO_CTA", "NO_COLOR", "CI", "CONTINUOUS_INTEGRATION",
+                  "BUILD_NUMBER", "GITHUB_ACTIONS", "GITLAB_CI", "JENKINS_URL")}
+        try:
+            self.assertIn("skills.seu.pet", repo_probe.convite({}))
+        finally:
+            for k, v in salvo.items():
+                if v is not None:
+                    os.environ[k] = v
+
+    def test_convite_cala_em_ci(self):
+        salvo = os.environ.get("CI")
+        os.environ["CI"] = "true"
+        try:
+            self.assertEqual(repo_probe.convite({}), "")
+        finally:
+            if salvo is None:
+                os.environ.pop("CI", None)
+            else:
+                os.environ["CI"] = salvo
+
+    def test_convite_cala_com_no_color(self):
+        salvo = os.environ.get("NO_COLOR")
+        os.environ["NO_COLOR"] = "1"
+        try:
+            self.assertEqual(repo_probe.convite({}), "")
+        finally:
+            if salvo is None:
+                os.environ.pop("NO_COLOR", None)
+            else:
+                os.environ["NO_COLOR"] = salvo
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

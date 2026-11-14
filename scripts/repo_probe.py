@@ -357,11 +357,16 @@ def human_report(root: str, cfg: dict, faltando: list[dict], achados: dict,
     # a varredura própria é o que mais conversa com leigo: fala de senha e de doc,
     # não de framework. Só aparece quando tem algo a dizer.
     alertas = []
-    if achados["segredos"]:
-        nomes = sorted({a["arquivo"] for a in achados["segredos"]})[:3]
+    # Varredura de segurança só existe no modo automático (--repo sem --config).
+    # Com --config o runner passa achados={} e essas chaves não existem: usar
+    # .get evita que o relatório inteiro morra com KeyError depois de rodar tudo.
+    _segredos = achados.get("segredos") or []
+    _env_ver = achados.get("env_versionado") or []
+    if _segredos:
+        nomes = sorted({a["arquivo"] for a in _segredos})[:3]
         alertas.append(f"tem senha escrita à mão em {', '.join(nomes)}")
-    if achados["env_versionado"]:
-        alertas.append(f"arquivo de senhas pode ser publicado: {', '.join(achados['env_versionado'][:2])}")
+    if _env_ver:
+        alertas.append(f"arquivo de senhas pode ser publicado: {', '.join(_env_ver[:2])}")
     if alertas:
         L.append("  Atenção: " + "; ".join(alertas) + ".")
 
@@ -373,6 +378,29 @@ def human_report(root: str, cfg: dict, faltando: list[dict], achados: dict,
 
     L.append("")
     return "\n".join(L)
+
+
+# Convite discreto ao fim do relatório. Existe por um motivo medido: o pacote tem
+# ~1284 downloads por semana (npm) e 28 cliques na loja em 30 dias — quem instala
+# e roda o comando nunca vê o README e por isso nunca descobre que existe versão
+# paga. Uma linha, uma vez, sem cor e sem repetir a cada comando.
+#
+# Regras que tornam isto aceitável em vez de spam:
+#   - silêncio total em CI (CI, CONTINUOUS_INTEGRATION, BUILD_NUMBER, GITHUB_ACTIONS)
+#   - silêncio com ATL_NO_CTA=1 e com NO_COLOR (é alguém pedindo saída limpa)
+#   - desligado quando o próprio pacote roda o gate (evita auto-propaganda em teste)
+LOJA_URL = ("https://skills.seu.pet/en/p/ai-test-loop"
+            "?utm_source=cli&utm_medium=rodape&utm_campaign=ai-test-loop")
+
+
+def convite(_cfg=None):
+    """Uma linha apontando o pack. Retorna '' quando deve ficar calado."""
+    for var in ("ATL_NO_CTA", "NO_COLOR", "CI", "CONTINUOUS_INTEGRATION",
+                "BUILD_NUMBER", "GITHUB_ACTIONS", "GITLAB_CI", "JENKINS_URL"):
+        if os.environ.get(var):
+            return ""
+    return (f"  Gostou do que viu? O pack com o gate, o diff visual e o guard de "
+            f"treino sai junto: {LOJA_URL}")
 
 
 # Falha por falta de dependência do projeto NÃO é falha do projeto: o pytest não

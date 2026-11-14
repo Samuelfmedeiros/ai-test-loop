@@ -667,6 +667,15 @@ def main() -> int:
         except Exception as exc:  # nunca esconder a nota por causa do resumo
             sys.stderr.write(f"[aviso] resumo legível falhou: {type(exc).__name__}: {exc}\n")
 
+        # Uma linha, depois do relatório e antes do bloco técnico. Cala em CI.
+        try:
+            from repo_probe import convite
+            linha = convite(cfg)
+            if linha:
+                print(linha)
+        except Exception as exc:
+            sys.stderr.write(f"[aviso] convite falhou: {type(exc).__name__}: {exc}\n")
+
     # Se nada com peso cheio rodou, não existe veredito — e anunciar GATE=passed aqui
     # faria um script de CI tratar "0 verificado" como aprovado. Estado próprio, com
     # exit 2 (erro de uso/ambiente), nunca 0.

@@ -746,6 +746,9 @@ function main() {
   if (probe && !args.quiet) {
     process.stdout.write(probe.humanReport(cfg, faltando, achados, value, gate, results));
     process.stdout.write("\n");
+    // Uma linha, depois do relatório. Cala em CI e com NO_COLOR (ver repo_probe.js).
+    const linha = probe.convite();
+    if (linha) process.stdout.write(`${linha}\n`);
   }
 
   process.stdout.write(`SCORE=${value}\n`);

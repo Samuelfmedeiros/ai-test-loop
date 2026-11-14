@@ -3,6 +3,28 @@
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.2.3] — 2026-11-14
+
+### Adicionado
+
+- **Uma linha no fim do relatório apontando o pack.** Medido: 1284 downloads npm por
+  semana e 28 cliques na loja em 30 dias, ou seja 2,2% dos que instalam visitam o site.
+  Quem roda `npx` não abre README, então nunca descobre a versão paga. O convite imprime
+  uma linha depois da nota, com UTM `cli/rodape`.
+
+### Corrigido
+
+- **Relatório legível morria com `KeyError: 'segredos'` no modo `--config`.** Nesse
+  caminho o runner passa `achados={}` e as chaves da varredura de segurança não existem.
+  Rodava todos os checks, calculava a nota e estourava antes de imprimir qualquer coisa.
+  Agora usa `.get` e o relatório sai completo.
+
+### Silêncio garantido
+
+O convite não aparece em `CI`, `CONTINUOUS_INTEGRATION`, `BUILD_NUMBER`,
+`GITHUB_ACTIONS`, `GITLAB_CI`, `JENKINS_URL`, `NO_COLOR` ou `ATL_NO_CTA=1`. Propaganda em
+log de pipeline quebra contrato. Testado nas duas linguagens (Python e Node).
+
 ## [1.2.1] — 2026-11-13
 
 ### Corrigido
