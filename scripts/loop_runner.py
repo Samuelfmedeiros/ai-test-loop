@@ -382,6 +382,19 @@ def main() -> int:
               f"(backup: {backup.name})")
         return 0
 
+    # `--config` que nao existe nao pode matar a execucao (medido 13/11/2026 no
+    # telemetria: 51 erros contra 23 runs, e a maioria morria em 3ms com
+    # "config not found"). Quem digita `--config loop.json` seguindo a doc antiga
+    # esta no diretorio do projeto e QUER testar; o arquivo e detalhe de schema,
+    # nao pre-requisito. Cai no auto-probe do diretorio atual e avisa.
+    if args.config and not os.path.exists(args.config) and not args.repo:
+        sys.stderr.write(
+            f"[loop_runner] {args.config} nao existe — montando o teste do "
+            f"diretório atual ({os.getcwd()}). Crie o loop.json depois, se quiser "
+            f"fixar seus proprios comandos.\n")
+        args.repo = os.getcwd()
+        args.config = None
+
     # Modo rápido (11/11/2026): sem `--config` e com `--repo`, o teste se monta sozinho.
     # Quem tem a config escrita continua igual — este caminho só existe para não
     # obrigar ninguém a aprender o schema antes de ver o primeiro resultado.

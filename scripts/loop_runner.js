@@ -439,6 +439,17 @@ function main() {
   }
   if (!args.config && !args.repo) die("--repo <pasta|url> or --config <arquivo.json> is required\n" + USAGE);
 
+  // `--config` inexistente nao pode matar a execucao (medido 13/11/2026: 51 erros
+  // contra 23 runs, maioria morrendo em 3ms com "config not found"). Quem digita
+  // `--config loop.json` pela doc antiga esta no diretorio do projeto e quer testar.
+  if (args.config && !fs.existsSync(args.config) && !args.repo) {
+    process.stderr.write(
+      `[loop_runner] ${args.config} nao existe — montando o teste do diretorio atual ` +
+      `(${process.cwd()}). Crie o loop.json depois, se quiser fixar seus proprios comandos.\n`);
+    args.repo = process.cwd();
+    args.config = null;
+  }
+
   if (args.migrateConfig) {
     if (!args.config) die("--migrate-config precisa de --config <arquivo>");
     if (!fs.existsSync(args.config)) die(`config not found: ${args.config}`);
