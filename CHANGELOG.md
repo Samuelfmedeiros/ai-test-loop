@@ -68,3 +68,15 @@ log de pipeline quebra contrato. Testado nas duas linguagens (Python e Node).
 ### Corrigido
 
 - Falso limpo em falha de scanner.
+
+### Publicacao PyPI (14/11/2026)
+
+- `scripts/publica-py.sh`: builda e publica o pacote CANONICO `ai-test-loop`.
+  Antes nao existia script nem pyproject canonico commitado (a 1.1.3 foi publicada
+  com o pyproject trocado na mao e restaurado depois), entao o repo nao
+  reproduzia o que estava no PyPI.
+- O script sincroniza os runners embutidos em `ai_test_loop/scripts/` e verifica
+  a versao antes de subir.
+- Corrigido no caminho: `gate_core.py` faltava no pacote e o comando instalado
+  morria com `ModuleNotFoundError: No module named 'gate_core'` — bug que so
+  apareceria para quem instalasse do PyPI.
