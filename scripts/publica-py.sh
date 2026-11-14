@@ -30,6 +30,13 @@ cp -r "$REPO/ai_test_loop" "$WORK/"
 cp -r "$REPO/scripts" "$WORK/" 2>/dev/null || true
 cp -r "$REPO/data" "$WORK/" 2>/dev/null || true
 cp "$REPO/README.md" "$REPO/LICENSE" "$REPO/MANIFEST.in" "$WORK/"
+
+# 2b. O README vem do repo, que e o MESMO do npm — e por isso todo link da loja
+# diz utm_source=npm. Publicado no PyPI como esta, os 334 downloads/semana do
+# PyPI entram na atribuicao do npm e nao da para saber qual canal traz clique.
+# Reescreve SO a copia do build: o repo segue com npm (senao o npm perde a dele).
+sed -i 's/utm_source=npm/utm_source=pypi/g' "$WORK/README.md"
+echo "[publica-py] README: utm_source npm -> pypi ($(grep -c 'utm_source=pypi' "$WORK/README.md") links)"
 find "$WORK" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
 find "$WORK" -name '*.bak-*' -delete 2>/dev/null || true
 find "$WORK" -name '*.old-*' -delete 2>/dev/null || true
