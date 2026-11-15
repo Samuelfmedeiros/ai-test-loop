@@ -83,10 +83,16 @@ def validate_config(cfg: dict) -> None:
 # literal sempre atrasa o proximo adendo — o hash passa a derivar do schema, e
 # tests/test_fingerprint_schema.py falha se uma chave do config ficar de fora.
 TOP_LEVEL_KEYS = ("name", "threshold", "max_rounds", "strict_tests",
-                  "blocking_gaps", "version", "runner")
+                  "blocking_gaps", "version", "runner",
+                  # Anti-cheat de censo (15/11/2026): limite de erosao de testes.
+                  "erosion_max_pct",
+                  # Raiz da arvore medida, para o binding do relatorio (furo 1.4).
+                  "repo")
 CHECK_KEYS = ("name", "cmd", "cwd", "weight", "severity", "required", "expect_exit",
               "must_match", "fail_if_output_matches", "timeout_s",
-              "min_passed", "allow_skipped", "junit_xml", "erosion", "min_coverage")
+              "min_passed", "allow_skipped", "junit_xml", "erosion", "min_coverage",
+              # Anti-cheat de censo (15/11/2026): motivo explicito para remocao.
+              "allow_test_removal")
 # Chaves que NAO entram no hash por serem rotulo/telemetria, nao regua.
 FINGERPRINT_EXCLUDE = frozenset({"name", "version", "runner", "comment", "notes"})
 

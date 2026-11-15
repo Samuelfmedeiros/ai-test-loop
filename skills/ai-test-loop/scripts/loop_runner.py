@@ -116,7 +116,63 @@ except ImportError:  # execucao direta: python scripts/loop_runner.py
 
 DEFAULT_TIMEOUT = 900
 MAX_OUTPUT_CHARS = 8000
+# Onde a evidencia INTEGRAL de cada check e' gravada. Vazio = nao grava (compat).
+# O orquestrador aponta para uma pasta fora do repo avaliado quando quer prova
+# que o agente nao pode reescrever; sem isso, fica ao lado do report.
+EVIDENCE_DIR = os.environ.get("ROGER_EVIDENCE_DIR", "")
 _SHELL: list[str] | None = None
+
+
+def tree_binding(path: str) -> dict:
+    """Prova a QUE arvore o veredito pertence (furo 1.4, 15/11/2026).
+
+    Sem isso o relatorio diz `gate: passed` e nada amarra esse veredito ao codigo
+    que foi medido: o agente commita, faz checkout, e reapresenta o JSON antigo
+    como prova do estado novo. Medido: `diff_sha256`/`rev-parse HEAD` nao existiam
+    no motor — o relatorio era um passaporte sem foto.
+
+    Tudo aqui e' OPCIONAL e best-effort: fora de um repo Git, devolve o que deu.
+    Ausencia de campo NUNCA vira "limpo" — vira `git: false`.
+    """
+    info = {"git": False, "head": None, "branch": None, "dirty": None,
+            "dirty_files": None, "diff_sha256": None, "diff_lines": None}
+
+    def _git(*a):
+        try:
+            p = subprocess.run(("git",) + a, cwd=path, capture_output=True,
+                               text=True, timeout=30, stdin=subprocess.DEVNULL)
+            return p.returncode, p.stdout
+        except (OSError, subprocess.SubprocessError):
+            return 1, ""
+
+    rc, out = _git("rev-parse", "HEAD")
+    if rc != 0:
+        return info
+    info["git"] = True
+    info["head"] = out.strip()
+    rc, out = _git("rev-parse", "--abbrev-ref", "HEAD")
+    info["branch"] = out.strip() if rc == 0 else None
+    # `diff HEAD` cobre staged+unstaged de arquivos rastreados; o hash e' do
+    # CONTEUDO do diff, nao do path — dois checkouts diferentes com a mesma
+    # alteracao dao o mesmo hash, que e' o que queremos comparar.
+    rc, out = _git("diff", "HEAD")
+    if rc == 0:
+        info["diff_sha256"] = hashlib.sha256(out.encode("utf-8", "replace")).hexdigest()
+        info["diff_lines"] = len(out.splitlines())
+        rc_u, untracked = _git("ls-files", "--others", "--exclude-standard")
+        files = [l for l in out.splitlines() if l.startswith("diff --git")]
+        if rc_u == 0:
+            # Os artefatos do PROPRIO gate (loop.json, *-report-rN.json,
+            # .*-state.json) nascem untracked e fariam toda arvore parecer suja
+            # — medido 15/11: repo recem-criado dava dirty=True files=1 sem
+            # nenhuma alteracao real. Sujeira tem que significar codigo mudado.
+            _ruido = re.compile(r"(^|/)(\.?[^/]*-state\.json|[^/]*-report-r\d+\.json|"
+                                r"loop\.json|\.roger-evidence/)")
+            files += [f"untracked: {l}" for l in untracked.splitlines()
+                      if l.strip() and not _ruido.match(l)]
+        info["dirty_files"] = len(files)
+        info["dirty"] = bool(files)
+    return info
 
 
 def load_config(path: str) -> dict:
@@ -239,14 +295,13 @@ def run_check(chk: dict) -> dict:
     # nao e policiado, para nao reprovar suite que ja tinha skip legitimo com a
     # config antiga. `strict_tests: true` no config liga a policia em todos.
     politica = chk.get("allow_skipped")
-    if min_passed is not None or politica is not None:
-        # JUnit XML quando o check declara `junit_xml` — autoritativo. Sem ele,
-        # caimos no sumario e depois na linha de progresso (que muda com -q/-v).
-        _jx = chk.get("junit_xml")
-        _jpath = None
-        if _jx:
-            _jpath = _jx if os.path.isabs(_jx) else os.path.join(cwd or os.getcwd(), _jx)
-        counts = parse_test_counts(combined, junit_path=_jpath)
+    # O censo do anti-cheat (furo 1.8) precisa da contagem SEMPRE, mesmo em check
+    # que não declara política: é o número que vira o teto da próxima rodada.
+    _jx = chk.get("junit_xml")
+    _jpath = None
+    if _jx:
+        _jpath = _jx if os.path.isabs(_jx) else os.path.join(cwd or os.getcwd(), _jx)
+    counts = parse_test_counts(combined, junit_path=_jpath)
     if min_passed is not None:
         if not counts:
             reasons.append(
@@ -269,8 +324,47 @@ def run_check(chk: dict) -> dict:
 
     passed = not reasons
     evidence = combined.strip()
+    # Furo 1.7 (medido 15/11/2026): o corte era metade da CABECA + metade do RABO —
+    # justamente o miolo onde mora a assertion que falhou era o unico trecho
+    # descartado. Um relatorio que perde a linha do erro "prova" que tudo passou.
+    # Agora: cabeca + janela em volta do PRIMEIRO erro + rabo, e o texto integral
+    # vai para disco com sha256 no registro (hash curto = prova de nao-edicao).
+    full = combined
+    evidence_sha256 = hashlib.sha256(full.encode("utf-8", "replace")).hexdigest()
+    evidence_lines = full.count("\n") + 1 if full else 0
+    evidence_path = None
+    if EVIDENCE_DIR:
+        try:
+            os.makedirs(EVIDENCE_DIR, exist_ok=True)
+            safe = re.sub(r"[^A-Za-z0-9_.-]+", "-", name)[:60].strip("-") or "check"
+            evidence_path = os.path.join(EVIDENCE_DIR, f"{safe}.log")
+            with open(evidence_path, "w", encoding="utf-8", errors="replace") as fh:
+                fh.write(full)
+        except OSError as exc:  # nomear o que quebrou, nunca engolir
+            evidence_path = f"(nao gravavel: {type(exc).__name__}: {exc})"
     if len(evidence) > MAX_OUTPUT_CHARS:
-        evidence = evidence[: MAX_OUTPUT_CHARS // 2] + "\n...[truncated]...\n" + evidence[-MAX_OUTPUT_CHARS // 2:]
+        half = MAX_OUTPUT_CHARS // 2
+        _erro = re.compile(
+            r"(Failed|FAILED|AssertionError|Error|Traceback|error:|FAIL\b|\[E\]|"
+            r"EOENT|expected .* got|assert)",
+            re.IGNORECASE)
+        _linhas = evidence.splitlines()
+        _alvo = 0
+        for _i, _l in enumerate(_linhas):
+            if _erro.search(_l):
+                _alvo = _i
+                break
+        _ini = max(0, _alvo - 20)
+        _fim = min(len(_linhas), _alvo + 20)
+        _janela = "\n".join(_linhas[_ini:_fim])
+        evidence = (
+            evidence[:half]
+            + f"\n...[truncated: {len(_linhas)} linhas no total, "
+              f"janela em volta da 1a falha (linha {_alvo + 1}) abaixo]...\n"
+            + _janela
+            + f"\n...[truncated]...\n"
+            + evidence[-half:]
+        )
     return {
         "name": name,
         "cmd": chk["cmd"],
@@ -284,6 +378,17 @@ def run_check(chk: dict) -> dict:
         "exit_code": rc,
         "duration_s": duration,
         "evidence": evidence,
+        # Integridade da evidencia (furo 1.7): o texto acima e' recortado para
+        # caber no relatorio; ESTES campos provam o que foi de fato executado.
+        # `evidence_sha256` cobre a saida INTEGRAL, nao o recorte.
+        "evidence_sha256": evidence_sha256,
+        "evidence_lines": evidence_lines,
+        "evidence_path": evidence_path,
+        "evidence_truncated": len(full) > MAX_OUTPUT_CHARS,
+        # Censo (furo 1.8): quantos testes EXISTEM/PASSAM nesta rodada. Sem isso
+        # gravado no report, a proxima rodada nao tem teto para comparar e apagar
+        # testes que falham vira o caminho mais barato para subir o score.
+        "counts": counts or {},
     }
 
 
@@ -322,8 +427,11 @@ def main() -> int:
         # nao dizia nada sobre o resto do produto. Medido: 555 downloads/npm no mes
         # e ZERO hits com utm_source=npm na loja. O epilog e o unico lugar honesto
         # de por o link (nao interrompe a saida, nao quebra script de terceiro).
+        # 15/11/2026: o destino era /p/ai-test-loop, a pagina do produto GRATIS que
+        # o usuario ja tem. Quem pede --help ja instalou o pacote — o degrau dele
+        # e o pack. Medido: 1.839 downloads npm/30d e 0 venda.
         epilog=("Full version, packs and paid support: "
-                "https://skills.seu.pet/p/ai-test-loop"
+                "https://skills.seu.pet/p/pack-completo"
                 "?utm_source=cli&utm_medium=help&utm_campaign=ai-test-loop"),
     )
     ap.add_argument("--config", help="arquivo loop.json (opcional se usar --repo)")
@@ -381,6 +489,19 @@ def main() -> int:
         print(f"[migrate] {len(mudancas)} mudanca(s) gravadas em {args.config} "
               f"(backup: {backup.name})")
         return 0
+
+    # `--config` que nao existe nao pode matar a execucao (medido 13/11/2026 no
+    # telemetria: 51 erros contra 23 runs, e a maioria morria em 3ms com
+    # "config not found"). Quem digita `--config loop.json` seguindo a doc antiga
+    # esta no diretorio do projeto e QUER testar; o arquivo e detalhe de schema,
+    # nao pre-requisito. Cai no auto-probe do diretorio atual e avisa.
+    if args.config and not os.path.exists(args.config) and not args.repo:
+        sys.stderr.write(
+            f"[loop_runner] {args.config} nao existe — montando o teste do "
+            f"diretório atual ({os.getcwd()}). Crie o loop.json depois, se quiser "
+            f"fixar seus proprios comandos.\n")
+        args.repo = os.getcwd()
+        args.config = None
 
     # Modo rápido (11/11/2026): sem `--config` e com `--repo`, o teste se monta sozinho.
     # Quem tem a config escrita continua igual — este caminho só existe para não
@@ -498,7 +619,6 @@ def main() -> int:
 
     value = score(results)
     threshold = float(cfg["threshold"])
-
     # Régua congelada: o round 1 grava a impressao digital da config; todo round
     # seguinte compara. Sem isso o agente apaga o check que falhou, baixa o peso
     # ou derruba o threshold entre rounds e o relatorio nao registra nada —
@@ -569,6 +689,56 @@ def main() -> int:
     elif runner_drift and args.approve_runner:
         runner_drift = False
 
+    # ── Anti-cheat de CENSO (furo 1.8, 15/11/2026) ─────────────────────────
+    # O gate media "quantos testes passaram", nunca "quantos testes EXISTEM".
+    # Assim, apagar os testes que falham sobe o score: 158 verdes viram 120
+    # verdes e nada reclama. `min_passed` no config e' um chao ESTATICO — se o
+    # agente edita o config ele edita o chao (a config tem hash, mas o hash
+    # congela o valor novo, nao denuncia a queda).
+    #
+    # Aqui o censo e' DERIVADO: o maior `passed` ja visto para o mesmo check na
+    # mesma config vira o teto, e a rodada atual nao pode ficar abaixo de
+    # `erosion_max_pct` (default 20%) dele. Erosao legitima (teste removido de
+    # proposito) tem caminho explicito: `allow_test_removal: "motivo"` no check.
+    _censo = {}
+    _erosao = []
+    _pct = float(cfg.get("erosion_max_pct", 20))
+    for _r in _prev_state.get("rounds", []):
+        for _reg in (_r.get("checks") or []):
+            _n, _p = _reg.get("name"), (_reg.get("counts") or {}).get("passed")
+            if _n and isinstance(_p, int) and _p > 0:
+                _censo[_n] = max(_censo.get(_n, 0), _p)
+    for _reg in results:
+        _n = _reg.get("name")
+        _p = (_reg.get("counts") or {}).get("passed")
+        _antes = _censo.get(_n)
+        if _antes and isinstance(_p, int):
+            _queda = _antes - _p
+            if _queda > 0 and _queda > int(_antes * _pct / 100.0):
+                _motivo = None
+                for _orig in cfg.get("checks", []):
+                    if (_orig.get("name") or "") == _n:
+                        _motivo = _orig.get("allow_test_removal")
+                if not _motivo:
+                    _msg = (f"erosao de testes em '{_n}': {_p} passando agora vs "
+                            f"{_antes} no maior round anterior (-{_queda}, "
+                            f"limite {_pct:.0f}%) — teste removido/desativado nao "
+                            f"e' teste aprovado. Declare allow_test_removal no check "
+                            f"se a remocao for intencional")
+                    _erosao.append(_msg)
+                    _reg.setdefault("reasons", []).append(_msg)
+                    _reg["passed"] = False
+
+    _tree_raiz = cfg.get("repo") or os.getcwd()
+    _tree = tree_binding(_tree_raiz)
+
+    if _erosao:
+        # O score foi calculado ANTES da erosão; sem recalcular, o check que caiu
+        # continuaria pontuando como aprovado no número final e o bloqueio seria
+        # só cosmético no relatório. Medido no teste: score não mudava.
+        value = score(results)
+        gaps.extend(_erosao)
+
     report = {
         "project": cfg["name"],
         "round": round_no,
@@ -589,6 +759,9 @@ def main() -> int:
         "drift_invalida_motivo": drift_invalida_motivo,
         "runner": _runner_fp,
         "runner_drift": runner_drift,
+        # Furo 1.4: a QUE arvore este veredito pertence. Sem isso o JSON antigo
+        # serve de prova para codigo novo (commit/checkout depois do gate).
+        "tree": _tree,
         "approved_by": args.approve if drift_invalida is False and _drift else None,
         "round_overridden": round_overridden,
     }
@@ -653,6 +826,15 @@ def main() -> int:
                                achados, value, gate, results))
         except Exception as exc:  # nunca esconder a nota por causa do resumo
             sys.stderr.write(f"[aviso] resumo legível falhou: {type(exc).__name__}: {exc}\n")
+
+        # Uma linha, depois do relatório e antes do bloco técnico. Cala em CI.
+        try:
+            from repo_probe import convite
+            linha = convite(cfg)
+            if linha:
+                print(linha)
+        except Exception as exc:
+            sys.stderr.write(f"[aviso] convite falhou: {type(exc).__name__}: {exc}\n")
 
     # Se nada com peso cheio rodou, não existe veredito — e anunciar GATE=passed aqui
     # faria um script de CI tratar "0 verificado" como aprovado. Estado próprio, com
