@@ -827,7 +827,15 @@ def main() -> int:
         except Exception as exc:  # nunca esconder a nota por causa do resumo
             sys.stderr.write(f"[aviso] resumo legível falhou: {type(exc).__name__}: {exc}\n")
 
-        # Uma linha, depois do relatório e antes do bloco técnico. Cala em CI.
+    # Uma linha, depois do relatório e antes do bloco técnico. Cala em CI.
+    #
+    # 15/11/2026: este bloco vivia DENTRO de `if args.repo`. Medido: o primeiro
+    # comando do README (`npx ai-test-loop --config loop.json`) imprimia so
+    # SCORE/GATE/GAPS e nenhum link — 2.248 downloads npm + 555 PyPI no mes e
+    # 54 cliques na loja (1,9%), 0 lead. Quem roda --config ja provou que usa o
+    # gate; e o publico mais quente que existe e nao tinha degrau nenhum.
+    # `convite()` ja se cala em CI por variavel de ambiente, entao nao polui log.
+    if not args.quiet:
         try:
             from repo_probe import convite
             linha = convite(cfg)

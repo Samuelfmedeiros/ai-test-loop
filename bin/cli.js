@@ -95,9 +95,13 @@ function convite(score) {
   if (QUIET || !process.stdout.isTTY) return;
   if (process.env.CI || process.env.AI_TEST_LOOP_NO_TELEMETRY === "1") return;
   const nota = score ? `Nota ${score}/100. ` : "";
+  // Destino corrigido em 15/11/2026: apontava para /p/ai-test-loop, a pagina do
+  // produto GRATIS que o usuario acabou de rodar. Ele chegava la e a oferta era
+  // "Baixar gratis" — o que ja estava no disco. Medido: 1.839 downloads npm/30d,
+  // 23 visitas npm/cli, 0 venda. O proximo degrau de quem rodou o motor e o pack.
   console.log(
     `\n${nota}Quer isso travando entrega de verdade (gate + diff visual + relatório)? ` +
-    `https://skills.seu.pet/p/ai-test-loop?utm_source=cli&utm_medium=footer&utm_campaign=ai-test-loop\n`
+    `https://skills.seu.pet/p/pack-completo?utm_source=cli&utm_medium=footer&utm_campaign=ai-test-loop\n`
   );
 }
 
@@ -179,7 +183,27 @@ Pacote completo, packs e suporte: https://skills.seu.pet/p/ai-test-loop?utm_sour
 
 // ---------------------------------------------------------------- execução
 const modo = modoDe(argv);
-const semArgumentos = argvRunner.length === 0;
+
+// Sem argumento: o usuario acabou de instalar e digitou so o nome do pacote.
+// Antes isto imprimia 32 linhas de ajuda e saia. Medido 15/11/2026 no orders.db de
+// producao: 48 instalacoes, 33 pediram help e pararam, 26 delas com UM evento so —
+// viram a ajuda uma vez e nunca voltaram. A ajuda nao e o produto; o produto e a nota.
+// Agora, se o diretorio atual parece um projeto, roda direto nele (o caminho que o
+// help promete em "PRIMEIRA VEZ"); se nao parece, mostra a ajuda como antes.
+const MARCADORES_PROJETO = [
+  "package.json", "pyproject.toml", "setup.py", "go.mod",
+  "Cargo.toml", "pom.xml", "composer.json", "Gemfile", "requirements.txt",
+];
+const pareceProjeto = MARCADORES_PROJETO.some((m) =>
+  fs.existsSync(path.join(process.cwd(), m)));
+
+// Rodar sozinho dentro de um projeto = o caminho de "PRIMEIRA VEZ" do help, sem exigir
+// que o usuario leia a ajuda e digite o comando de novo. O runner precisa de --repo.
+const argsParaRunner = (argvRunner.length === 0 && pareceProjeto)
+  ? ["--repo", "."]
+  : argvRunner;
+
+const semArgumentos = argvRunner.length === 0 && !pareceProjeto;
 
 // Saídas que NÃO chegam no runner: --help, --version e o "sem argumento" (que mostra a
 // ajuda). Sem esta guarda o fluxo continua depois do `console.log` e o runner recebe
@@ -230,7 +254,7 @@ if (!saiAntesDoRunner) {
         .finally(() => process.exit(2));
       return;
     }
-    const p = spawn(candidatos[i], [runner.alvo, ...argvRunner ?? []], {
+    const p = spawn(candidatos[i], [runner.alvo, ...argsParaRunner], {
       stdio: ["inherit", "pipe", "pipe"],
     });
 

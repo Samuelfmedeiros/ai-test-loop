@@ -392,6 +392,12 @@ def human_report(root: str, cfg: dict, faltando: list[dict], achados: dict,
 LOJA_URL = ("https://skills.seu.pet/en/p/ai-test-loop"
             "?utm_source=cli&utm_medium=rodape&utm_campaign=ai-test-loop")
 
+# 15/11/2026: quem ja rodou o gate nao precisa do produto gratis que ele acabou
+# de usar — precisa do pacote pago. O rodape apontava para a pagina gratis, que
+# o usuario ja tem em maos. Degrau errado = clique que nao vira compra.
+PACK_URL = ("https://skills.seu.pet/en/p/pack-completo"
+            "?utm_source=cli&utm_medium=rodape-pack&utm_campaign=ai-test-loop")
+
 
 def convite(_cfg=None):
     """Uma linha apontando o pack. Retorna '' quando deve ficar calado."""
@@ -400,7 +406,7 @@ def convite(_cfg=None):
         if os.environ.get(var):
             return ""
     return (f"  Gostou do que viu? O pack com o gate, o diff visual e o guard de "
-            f"treino sai junto: {LOJA_URL}")
+            f"treino sai junto: {PACK_URL}")
 
 
 # Falha por falta de dependência do projeto NÃO é falha do projeto: o pytest não

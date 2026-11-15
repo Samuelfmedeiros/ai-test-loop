@@ -19,7 +19,7 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CLI = os.path.join(RAIZ, "bin", "cli.js")
 
 
-def roda(*args, env_extra=None, espera_erro=False):
+def roda(*args, env_extra=None, espera_erro=False, cwd=None):
     """Executa o CLI e devolve (rc, stdout, stderr)."""
     env = dict(os.environ)
     # telemetria desligada: teste nao deve escrever no servidor do site
@@ -28,7 +28,7 @@ def roda(*args, env_extra=None, espera_erro=False):
         env.update(env_extra)
     p = subprocess.run(
         ["node", CLI, *args],
-        capture_output=True, text=True, timeout=120, env=env,
+        capture_output=True, text=True, timeout=120, env=env, cwd=cwd,
     )
     return p.returncode, p.stdout, p.stderr
 
@@ -53,12 +53,27 @@ class TestAjuda(unittest.TestCase):
         self.assertIn("utm_source=cli", out)
 
     def test_sem_argumento_mostra_ajuda_em_vez_de_erro(self):
-        """Sem argumento o usuario via 'error: --config is required' e ia embora."""
-        rc, out, err = roda()
+        """Sem argumento e FORA de projeto: ajuda. (Dentro de projeto ele roda — ver abaixo.)"""
+        with tempfile.TemporaryDirectory() as vazio:
+            rc, out, err = roda(cwd=vazio)
         self.assertEqual(rc, 0, f"sem argumento deveria sair limpo, veio rc={rc}")
         self.assertIn("USO", out)
         self.assertNotIn("the following arguments are required", out + err)
         self.assertNotIn("usage: loop_runner.py", out + err)
+
+    def test_sem_argumento_dentro_de_projeto_roda(self):
+        """O usuario instala e digita so o nome do pacote: tem de SAIR A NOTA.
+
+        Medido 15/11/2026 no orders.db de producao: 48 instalacoes, 33 pediram help e
+        pararam, 26 com UM evento so. A ajuda nao e o produto — a nota e.
+        """
+        with tempfile.TemporaryDirectory() as proj:
+            with open(os.path.join(proj, "package.json"), "w", encoding="utf-8") as f:
+                f.write('{"name":"probe","version":"1.0.0",'
+                        '"scripts":{"test":"echo ok"}}')
+            rc, out, err = roda(cwd=proj)
+        self.assertNotIn("USO", out, "dentro de projeto nao deve imprimir a ajuda")
+        self.assertIn("SCORE=", out, f"deveria rodar e imprimir a nota; veio: {out[:300]} {err[:300]}")
 
 
 class TestVersao(unittest.TestCase):
