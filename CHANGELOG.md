@@ -3,6 +3,17 @@
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.2.7] — 2026-11-17
+
+### Corrigido
+
+- **README em uma língua só.** O arquivo tinha a documentação em inglês e, depois de
+  `## License`, uma segunda documentação em português no mesmo arquivo — quem lia em
+  inglês caía em seções em português no meio da referência técnica. Agora `README.md`
+  é inglês, `README.pt-BR.md` é português, com link entre os dois no topo.
+- O exemplo de saída no README em inglês ganhou a nota de que o CLI imprime em pt-BR
+  (é saída real, não tradução).
+
 ## [1.2.6] — 2026-11-17
 
 ### Corrigido
