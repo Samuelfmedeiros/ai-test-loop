@@ -955,7 +955,7 @@ def main() -> int:
         print(f"GATE=blocked (round {round_no}/{cfg['max_rounds']}) — motivo="
               f"config_drift: regua alterada sem aprovacao "
               f"({_drift['expected'][:12]} -> {_drift['actual'][:12]}); "
-              f"reexecute com --approve {_approve_esperado} --approve-by <nome>"
+              f"reexecute com --approve {_approve_esperado} --approve-by Roger"
               + (f" [{drift_invalida_motivo}]" if drift_invalida_motivo else ""))
     elif _gap_block:
         print(f"GATE=blocked (round {round_no}/{cfg['max_rounds']}) — motivo="

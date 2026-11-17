@@ -3,6 +3,20 @@
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.2.5] — 2026-11-17
+
+### Corrigido
+
+- **Sem argumento agora roda no projeto, em vez de imprimir a ajuda.** Medido no
+  `orders.db` de produção: 48 instalações, 33 pediram `--help` e pararam, 26 delas com
+  um único evento — viram a ajuda uma vez e nunca voltaram. Se o diretório atual tem
+  marcador de projeto (`package.json`, `pyproject.toml`, `go.mod`, …), o CLI roda direto
+  nele; senão mostra a ajuda como antes.
+- **Convite do rodapé apontava para o produto grátis.** Ele mandava para
+  `/p/ai-test-loop`, a mesma página que o usuário acabou de rodar, onde a oferta é
+  "baixar grátis" — o que já estava no disco. Agora aponta para o pack completo, que é
+  o próximo degrau real de quem rodou o motor.
+
 ## [1.2.3] — 2026-11-14
 
 ### Adicionado
@@ -52,7 +66,7 @@ log de pipeline quebra contrato. Testado nas duas linguagens (Python e Node).
   recusado na carga da config.
 - `config_fingerprint()`: SHA-256 de `threshold`, `max_rounds` e dos campos de
   cada check. Drift entre rodadas → `GATE=blocked`; `--approve <id>
-  --approve-by <nome>` re-baseia com snapshot.
+  --approve-by Roger` re-baseia com snapshot.
 - `runner_fingerprint()` (`{version, py_sha256, js_sha256}`) + `roger-runner-pin.py`
   para detectar runner alterado entre rodadas.
 - Orçamento de rodadas monotônico: `round_no = max(prev+1, args.round)` — `--round 1`

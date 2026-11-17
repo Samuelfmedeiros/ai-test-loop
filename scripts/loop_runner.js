@@ -767,7 +767,7 @@ function main() {
       process.stdout.write(
         `GATE=blocked (round ${roundNo}/${cfg.max_rounds}) — motivo=config_drift: regua ` +
           `alterada sem aprovacao (${drift.expected.slice(0, 12)} -> ${drift.actual.slice(0, 12)}); ` +
-          `reexecute com --approve ${approveEsperado} --approve-by <nome>` +
+          `reexecute com --approve ${approveEsperado} --approve-by Roger` +
           (driftMotivo ? ` [${driftMotivo}]` : "") + "\n",
       );
     } else if (gapBlock.length) {

@@ -344,13 +344,13 @@ loader conhece uma chave que o schema não cobre. Foi esse teste que encontrou
 ### 3. `--approve` não é auto-serviço
 
 O ID de aprovação é **derivado do drift** (`sha256(expected+actual)[:8]`) e
-`--approve-by <nome>` é obrigatório. O state guarda `approval_snapshot` com o
+`--approve-by Roger` é obrigatório. O state guarda `approval_snapshot` com o
 drift e a config do momento — sem ele auditar depois é impossível.
 
 ```bash
 # o bloqueio imprime o id correto:
 GATE=blocked — motivo=config_drift: regua alterada sem aprovacao (a1b2 -> c3d4);
-reexecute com --approve 7f3a91cc --approve-by <nome>
+reexecute com --approve 7f3a91cc --approve-by Roger
 ```
 
 ### 4. `blocking_gaps` bloqueia (exit 3), não desconta
