@@ -64,6 +64,7 @@ import os
 import pathlib
 import re
 import shlex
+import signal
 import subprocess
 import sys
 import time
@@ -115,6 +116,47 @@ except ImportError:  # execucao direta: python scripts/loop_runner.py
     )
 
 DEFAULT_TIMEOUT = 900
+
+# Furo 1.5 (Roger v4, medido 15/11/2026): os checks herdavam o ambiente INTEIRO
+# do processo do runner. Duas consequencias medidas: (a) PYTHONPATH do gateway
+# (cp314) sombreava o venv do projeto e o pytest morria com
+# `ModuleNotFoundError: numpy._core._multiarray_umath` — mensagem que fala de
+# numpy e esconde a causa real; (b) VIRTUAL_ENV/CI/HOME de outra sessao mudavam
+# o resultado do MESMO commit (verde aqui, vermelho ali), o que destroi o valor
+# probatorio do gate. O ambiente agora e' montado explicitamente: so o que o
+# projeto precisa, mais o opt-in `env_passthrough` do check.
+AMBIENTE_BASE = ("PATH", "HOME", "LANG", "LC_ALL", "TZ", "TMPDIR", "SHELL",
+                 "USER", "LOGNAME", "PWD", "TERM")
+AMBIENTE_PROJETO = ("VIRTUAL_ENV", "CONDA_PREFIX", "NODE_ENV", "PYTHONPATH")
+
+
+def ambiente_do_check(chk: dict) -> dict:
+    """Ambiente deterministico para o check.
+
+    Base = PATH/HOME/locale (sem eles nada executa). `env_passthrough` no check
+    adiciona nomes ou prefixos (ex.: "AWS_", "GITHUB_") para os casos em que o
+    teste legitimos precisa de credencial/contexto. Qualquer outra variavel do
+    processo NAO vaza — o resultado nao muda conforme quem chamou o runner.
+    """
+    env = {k: os.environ[k] for k in AMBIENTE_BASE if k in os.environ}
+    # PATH do proprio ambiente, nao o herdado: evita interop (ex.: opencode.exe
+    # do Windows aparecendo antes do binario nativo).
+    env.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
+    extra = chk.get("env_passthrough") or ()
+    if isinstance(extra, str):
+        extra = [extra]
+    for padrao in extra:
+        if padrao.endswith("*") or padrao.endswith("_"):
+            pref = padrao.rstrip("*")
+            for k, v in os.environ.items():
+                if k.startswith(pref):
+                    env[k] = v
+        elif padrao in os.environ:
+            env[padrao] = os.environ[padrao]
+    # `env` literal no check (o projeto declara o que quer, sem herdar)
+    for k, v in (chk.get("env") or {}).items():
+        env[str(k)] = str(v)
+    return env
 MAX_OUTPUT_CHARS = 8000
 # Onde a evidencia INTEGRAL de cada check e' gravada. Vazio = nao grava (compat).
 # O orquestrador aponta para uma pasta fora do repo avaliado quando quer prova
@@ -244,6 +286,39 @@ def _shell() -> list[str]:
 
 
 
+def _kill_process_group(proc: "subprocess.Popen") -> None:
+    """Mata o GRUPO inteiro do check, nao so o processo direto.
+
+    O check roda sob `bash -o pipefail -c` com `start_new_session=True`, entao o
+    PID do bash e' lider do proprio grupo. Matar so ele deixa pytest/node/vite
+    orfaos — medido 15/11/2026: 4 pytest a 84-89% de CPU por mais de uma hora
+    depois do timeout, derrubando o host para load 20 e fazendo o round seguinte
+    brigar com o fantasma. SIGTERM primeiro (deixa o filho limpar), SIGKILL no
+    grupo depois se ele nao sair.
+    """
+    try:
+        pgid = os.getpgid(proc.pid)
+    except (ProcessLookupError, OSError):
+        pgid = None
+    for sig, espera in ((signal.SIGTERM, 5), (signal.SIGKILL, 3)):
+        try:
+            if pgid is not None:
+                os.killpg(pgid, sig)
+            else:
+                proc.send_signal(sig)
+        except (ProcessLookupError, OSError):
+            return
+        try:
+            proc.wait(timeout=espera)
+            # O lider morreu, mas o grupo pode ter filhos vivos: o SIGKILL do
+            # grupo ainda vale para eles.
+            if sig is signal.SIGTERM:
+                continue
+            return
+        except subprocess.TimeoutExpired:
+            continue
+
+
 def run_check(chk: dict) -> dict:
     """Run one check for real, return its result record with raw evidence."""
     name = chk.get("name") or chk["cmd"][:40]
@@ -255,17 +330,29 @@ def run_check(chk: dict) -> dict:
     wrapped = _shell() + [chk["cmd"]]
     started = time.time()
     timed_out = False
+    # Furo 1.6 (medido 15/11/2026): `subprocess.run(..., timeout=N)` mata so o
+    # PROCESSO DIRETO. O bash -o pipefail -c gera filhos (pytest, node, vite, o
+    # servidor de teste) e eles SOBREVIVEM ao timeout — ficam orfaos (PPID=1)
+    # consumindo CPU e segurando porta, e o proximo round do loop briga com o
+    # fantasma da rodada anterior. Medido: 4 pytest orfaos com 84-89% CPU por
+    # 1h+, segurando o host a load 20. Cura: sessao propria (setsid) + killpg no
+    # timeout, que alcanca o grupo inteiro.
+    proc = subprocess.Popen(
+        wrapped, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, stdin=subprocess.DEVNULL, start_new_session=True,
+        env=ambiente_do_check(chk),
+    )
     try:
-        proc = subprocess.run(
-            wrapped, cwd=cwd, capture_output=True, text=True, timeout=timeout,
-            stdin=subprocess.DEVNULL,
-        )
-        rc, out, err = proc.returncode, proc.stdout or "", proc.stderr or ""
-    except subprocess.TimeoutExpired as exc:
+        out, err = proc.communicate(timeout=timeout)
+        rc = proc.returncode
+    except subprocess.TimeoutExpired:
         timed_out = True
         rc = None
-        out = (exc.stdout or b"").decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
-        err = (exc.stderr or b"").decode("utf-8", "replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        _kill_process_group(proc)
+        try:
+            out, err = proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            out, err = "", ""
     duration = round(time.time() - started, 2)
     combined = (out or "") + ("\n" + err if err else "")
 
@@ -827,7 +914,15 @@ def main() -> int:
         except Exception as exc:  # nunca esconder a nota por causa do resumo
             sys.stderr.write(f"[aviso] resumo legível falhou: {type(exc).__name__}: {exc}\n")
 
-        # Uma linha, depois do relatório e antes do bloco técnico. Cala em CI.
+    # Uma linha, depois do relatório e antes do bloco técnico. Cala em CI.
+    #
+    # 15/11/2026: este bloco vivia DENTRO de `if args.repo`. Medido: o primeiro
+    # comando do README (`npx ai-test-loop --config loop.json`) imprimia so
+    # SCORE/GATE/GAPS e nenhum link — 2.248 downloads npm + 555 PyPI no mes e
+    # 54 cliques na loja (1,9%), 0 lead. Quem roda --config ja provou que usa o
+    # gate; e o publico mais quente que existe e nao tinha degrau nenhum.
+    # `convite()` ja se cala em CI por variavel de ambiente, entao nao polui log.
+    if not args.quiet:
         try:
             from repo_probe import convite
             linha = convite(cfg)

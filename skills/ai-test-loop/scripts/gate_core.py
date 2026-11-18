@@ -92,7 +92,10 @@ CHECK_KEYS = ("name", "cmd", "cwd", "weight", "severity", "required", "expect_ex
               "must_match", "fail_if_output_matches", "timeout_s",
               "min_passed", "allow_skipped", "junit_xml", "erosion", "min_coverage",
               # Anti-cheat de censo (15/11/2026): motivo explicito para remocao.
-              "allow_test_removal")
+              "allow_test_removal",
+              # Hermeticidade do check (furo 1.5, 15/11/2026): mudar o ambiente
+              # em que o check roda muda o resultado, entao tem de entrar no hash.
+              "env", "env_passthrough")
 # Chaves que NAO entram no hash por serem rotulo/telemetria, nao regua.
 FINGERPRINT_EXCLUDE = frozenset({"name", "version", "runner", "comment", "notes"})
 

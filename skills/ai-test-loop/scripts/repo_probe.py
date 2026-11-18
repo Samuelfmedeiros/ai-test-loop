@@ -142,6 +142,20 @@ def _checks(root: str, info: dict) -> tuple[list[dict], list[dict]]:
     faltando: list[dict] = []
     langs = set(info["langs"])
 
+    def _tem_teste_node() -> bool:
+        """`node --test` com *.test.js: padrão do Node moderno, sem dependência.
+
+        Medido 17/11/2026: projeto assim recebia "Nenhum teste automático
+        encontrado" e saía com 2. Só js/mjs/cjs — `.ts` exige loader extra e
+        inventar checagem que não roda é pior que não detectar.
+        """
+        padrao = re.compile(r"[^/\\]+\.(?:test|spec)\.(?:js|mjs|cjs)$")
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+            if any(padrao.match(fn) for fn in filenames):
+                return True
+        return False
+
     # ---- testes automatizados
     if "python" in langs:
         def _tem_teste_py() -> bool:
@@ -162,6 +176,9 @@ def _checks(root: str, info: dict) -> tuple[list[dict], list[dict]]:
         pm = info["pkg"] or "npm"
         checks.append({"name": f"testes automáticos ({pm})",
                        "cmd": f"{pm} test --silent" if pm == "npm" else f"{pm} test",
+                       "weight": 40, "timeout_s": 600, "cwd": root})
+    elif "node" in langs and _tem_teste_node():
+        checks.append({"name": "testes automáticos (node --test)", "cmd": "node --test",
                        "weight": 40, "timeout_s": 600, "cwd": root})
     if "go" in langs and shutil.which("go"):
         checks.append({"name": "testes automáticos (Go)", "cmd": "go test ./...",
@@ -357,11 +374,16 @@ def human_report(root: str, cfg: dict, faltando: list[dict], achados: dict,
     # a varredura própria é o que mais conversa com leigo: fala de senha e de doc,
     # não de framework. Só aparece quando tem algo a dizer.
     alertas = []
-    if achados["segredos"]:
-        nomes = sorted({a["arquivo"] for a in achados["segredos"]})[:3]
+    # Varredura de segurança só existe no modo automático (--repo sem --config).
+    # Com --config o runner passa achados={} e essas chaves não existem: usar
+    # .get evita que o relatório inteiro morra com KeyError depois de rodar tudo.
+    _segredos = achados.get("segredos") or []
+    _env_ver = achados.get("env_versionado") or []
+    if _segredos:
+        nomes = sorted({a["arquivo"] for a in _segredos})[:3]
         alertas.append(f"tem senha escrita à mão em {', '.join(nomes)}")
-    if achados["env_versionado"]:
-        alertas.append(f"arquivo de senhas pode ser publicado: {', '.join(achados['env_versionado'][:2])}")
+    if _env_ver:
+        alertas.append(f"arquivo de senhas pode ser publicado: {', '.join(_env_ver[:2])}")
     if alertas:
         L.append("  Atenção: " + "; ".join(alertas) + ".")
 
@@ -373,6 +395,35 @@ def human_report(root: str, cfg: dict, faltando: list[dict], achados: dict,
 
     L.append("")
     return "\n".join(L)
+
+
+# Convite discreto ao fim do relatório. Existe por um motivo medido: o pacote tem
+# ~1284 downloads por semana (npm) e 28 cliques na loja em 30 dias — quem instala
+# e roda o comando nunca vê o README e por isso nunca descobre que existe versão
+# paga. Uma linha, uma vez, sem cor e sem repetir a cada comando.
+#
+# Regras que tornam isto aceitável em vez de spam:
+#   - silêncio total em CI (CI, CONTINUOUS_INTEGRATION, BUILD_NUMBER, GITHUB_ACTIONS)
+#   - silêncio com ATL_NO_CTA=1 e com NO_COLOR (é alguém pedindo saída limpa)
+#   - desligado quando o próprio pacote roda o gate (evita auto-propaganda em teste)
+LOJA_URL = ("https://skills.seu.pet/en/p/ai-test-loop"
+            "?utm_source=cli&utm_medium=rodape&utm_campaign=ai-test-loop")
+
+# 15/11/2026: quem ja rodou o gate nao precisa do produto gratis que ele acabou
+# de usar — precisa do pacote pago. O rodape apontava para a pagina gratis, que
+# o usuario ja tem em maos. Degrau errado = clique que nao vira compra.
+PACK_URL = ("https://skills.seu.pet/en/p/pack-completo"
+            "?utm_source=cli&utm_medium=rodape-pack&utm_campaign=ai-test-loop")
+
+
+def convite(_cfg=None):
+    """Uma linha apontando o pack. Retorna '' quando deve ficar calado."""
+    for var in ("ATL_NO_CTA", "NO_COLOR", "CI", "CONTINUOUS_INTEGRATION",
+                "BUILD_NUMBER", "GITHUB_ACTIONS", "GITLAB_CI", "JENKINS_URL"):
+        if os.environ.get(var):
+            return ""
+    return (f"  Gostou do que viu? O pack com o gate, o diff visual e o guard de "
+            f"treino sai junto: {PACK_URL}")
 
 
 # Falha por falta de dependência do projeto NÃO é falha do projeto: o pytest não
@@ -417,6 +468,11 @@ def reclassify(results: list[dict]) -> tuple[list[dict], list[dict]]:
 
 
 _RODOU = re.compile(r"\b(\d+)\s+passed\b|\b\d+\s+tests?\s+passed\b")
+# `node --test` imprime `ℹ pass 3` / `ℹ fail 1` (spec) ou `# pass 3` (TAP), nunca
+# "N passed". Sem esta forma, projeto com node:test rodava e o relatório dizia
+# "nada chegou a rodar". `fail > 0` também prova que rodou — ler só `pass`
+# esconderia falha real atrás de "inconclusivo".
+_RODOU_NODE = re.compile(r"^\s*(?:ℹ|#)\s*(?:pass|fail)\s+(\d+)\s*$", re.MULTILINE)
 
 
 def _rodou_de_verdade(results: list[dict]) -> bool:
@@ -427,9 +483,13 @@ def _rodou_de_verdade(results: list[dict]) -> bool:
     esconderia uma falha real do projeto.
     """
     for r in results:
-        m = _RODOU.search(r.get("evidence") or "")
+        ev = r.get("evidence") or ""
+        m = _RODOU.search(ev)
         if m and int(m.group(1) or 0) > 0:
             return True
+        for mm in _RODOU_NODE.finditer(ev):
+            if int(mm.group(1) or 0) > 0:
+                return True
     return False
 
 

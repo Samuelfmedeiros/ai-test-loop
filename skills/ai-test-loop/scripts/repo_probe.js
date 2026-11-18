@@ -117,6 +117,21 @@ function temTestePy(root) {
   return false;
 }
 
+// Node moderno testa com o runner embutido (`node --test`) e arquivos *.test.js,
+// sem nenhuma dependência e sem `scripts.test` no package.json. Medido 17/11/2026:
+// um projeto assim recebia "Nenhum teste automático encontrado" e saía com 2 —
+// falso negativo que afasta justamente quem já segue o padrão do Node.
+// Só js/mjs/cjs: `.ts` exige loader extra e inventar checagem que não roda é pior
+// que não detectar (o contrato do probe é nunca inventar teste).
+const NODE_TEST_FILE = /(?:^|[\\/])[^\\/]+\.(?:test|spec)\.(?:js|mjs|cjs)$/;
+
+function temTesteNode(root) {
+  for (const [rel] of walk(root)) {
+    if (NODE_TEST_FILE.test(rel)) return true;
+  }
+  return false;
+}
+
 function checks(root, info) {
   const list = [];
   const faltando = [];
@@ -130,6 +145,11 @@ function checks(root, info) {
     const pm = info.pkg || "npm";
     list.push({ name: `testes automáticos (${pm})`,
       cmd: pm === "npm" ? "npm test --silent" : `${pm} test`,
+      weight: 40, timeout_s: 600, cwd: root });
+  } else if (langs.has("node") && temTesteNode(root)) {
+    // Sem `scripts.test` mas com *.test.js: o runner embutido do Node resolve, sem
+    // precisar instalar nada. É o caminho de quem usa node:test (zero dependências).
+    list.push({ name: "testes automáticos (node --test)", cmd: "node --test",
       weight: 40, timeout_s: 600, cwd: root });
   }
   if (langs.has("go") && which("go")) {
@@ -252,13 +272,21 @@ function reclassify(results) {
 }
 
 const RODOU = /\b(\d+)\s+passed\b|\b\d+\s+tests?\s+passed\b/;
+// `node --test` não diz "N passed": imprime `ℹ pass 3` / `ℹ fail 1` (spec) ou
+// `# pass 3` (TAP). Sem esta segunda forma, um projeto com node:test rodava e o
+// relatório dizia "nada chegou a rodar". `fail > 0` também prova que rodou — ler
+// só `pass` esconderia falha real atrás de "inconclusivo".
+const RODOU_NODE = /^\s*(?:ℹ|#)\s*(?:pass|fail)\s+(\d+)\s*$/gm;
 
-// "Não rodou nada" != "rodou e reprovou". Medido 11/11/2026 com `requests`: 407
-// testes passaram e 7 falharam — inconclusivo ali esconderia falha real.
 function rodouDeVerdade(results) {
   return results.some((r) => {
-    const m = (r.evidence || "").match(RODOU);
-    return m && Number.parseInt(m[1], 10) > 0;
+    const ev = r.evidence || "";
+    const m = ev.match(RODOU);
+    if (m && Number.parseInt(m[1], 10) > 0) return true;
+    for (const mm of ev.matchAll(RODOU_NODE)) {
+      if (Number.parseInt(mm[1], 10) > 0) return true;
+    }
+    return false;
   });
 }
 
@@ -361,4 +389,27 @@ function prepareRepo(target) {
   return dest;
 }
 
-module.exports = { buildConfig, cacheDir, prepareRepo, reclassify, inconclusive, humanReport };
+// Convite discreto ao fim do relatório. Espelha `convite()` do repo_probe.py: o pacote
+// tem ~1284 downloads/semana via npm e 28 cliques na loja em 30 dias — quem roda `npx`
+// nunca abre o README e por isso nunca descobre a versão paga.
+//
+// Silêncio obrigatório em CI e quando a pessoa pediu saída limpa (NO_COLOR). Propaganda
+// em log de pipeline quebra contrato; uma linha no terminal de quem rodou é aceitável.
+const LOJA_URL =
+  "https://skills.seu.pet/en/p/ai-test-loop" +
+  "?utm_source=cli&utm_medium=rodape&utm_campaign=ai-test-loop";
+
+function convite() {
+  for (const v of [
+    "ATL_NO_CTA", "NO_COLOR", "CI", "CONTINUOUS_INTEGRATION",
+    "BUILD_NUMBER", "GITHUB_ACTIONS", "GITLAB_CI", "JENKINS_URL",
+  ]) {
+    if (process.env[v]) return "";
+  }
+  return (
+    "  Gostou do que viu? O pack com o gate, o diff visual e o guard de " +
+    `treino sai junto: ${LOJA_URL}`
+  );
+}
+
+module.exports = { buildConfig, cacheDir, prepareRepo, reclassify, inconclusive, humanReport, convite };

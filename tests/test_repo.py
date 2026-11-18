@@ -61,6 +61,28 @@ class TestDeteccao(unittest.TestCase):
         cfg, _, _ = repo_probe.build_config(d)
         self.assertEqual(cfg["checks"], [])
 
+    def test_projeto_node_com_node_test_ganha_check(self):
+        """`node --test` + *.test.js é o padrão do Node moderno, sem dependência.
+
+        Antes de 17/11/2026 este projeto recebia "Nenhum teste automático
+        encontrado" e saía com 2 — falso negativo em quem já segue o padrão.
+        """
+        d = _proj({"package.json": '{"name":"demo","version":"1.0.0"}',
+                   "index.js": "module.exports = 1;\n",
+                   "soma.test.js": "const t=require('node:test');\n"})
+        cfg, _, _ = repo_probe.build_config(d)
+        nomes = [c["name"] for c in cfg["checks"]]
+        self.assertTrue(any("node --test" in n for n in nomes), nomes)
+
+    def test_node_com_scripts_test_prefere_npm(self):
+        # scripts.test continua sendo a fonte da verdade quando existe
+        d = _proj({"package.json": '{"name":"demo","scripts":{"test":"jest"}}',
+                   "a.test.js": "// teste\n"})
+        cfg, _, _ = repo_probe.build_config(d)
+        nomes = [c["name"] for c in cfg["checks"]]
+        self.assertTrue(any("(npm)" in n for n in nomes), nomes)
+        self.assertFalse(any("node --test" in n for n in nomes), nomes)
+
 
 class TestHonestidade(unittest.TestCase):
     """O risco do modo rápido não é quebrar: é dar veredito falso."""
@@ -98,6 +120,22 @@ class TestHonestidade(unittest.TestCase):
         r = {"name": "padrão do código", "passed": True, "required": False,
              "exit_code": 0, "evidence": "All checks passed!"}
         self.assertTrue(repo_probe.inconclusive([r]))
+
+    def test_node_test_com_falha_nao_vira_inconclusivo(self):
+        """`node --test` não imprime "N passed": imprime `ℹ pass 0` / `ℹ fail 1`.
+
+        Sem reconhecer esse formato, um teste que falhou era lido como "nada
+        rodou" e o projeto passava sem veredito — falha real escondida.
+        """
+        r = {"name": "testes automáticos (node --test)", "passed": False,
+             "exit_code": 1,
+             "evidence": "ℹ tests 1\nℹ pass 0\nℹ fail 1\n✖ soma errada"}
+        self.assertFalse(repo_probe.inconclusive([r]))
+
+    def test_node_test_aprovado_nao_vira_inconclusivo(self):
+        r = {"name": "testes automáticos (node --test)", "passed": True,
+             "exit_code": 0, "evidence": "ℹ tests 1\nℹ pass 1\nℹ fail 0"}
+        self.assertFalse(repo_probe.inconclusive([r]))
 
 
 class TestSeguranca(unittest.TestCase):

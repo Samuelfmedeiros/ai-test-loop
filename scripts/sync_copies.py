@@ -31,7 +31,7 @@ ALVOS = [
     RAIZ / "skills" / "ai-test-loop" / "scripts",
     RAIZ / "ai_test_loop" / "scripts",
 ]
-ARQUIVOS = ["loop_runner.py", "loop_runner.js", "gate_core.py"]
+ARQUIVOS = ["loop_runner.py", "loop_runner.js", "gate_core.py", "repo_probe.py", "repo_probe.js"]
 
 
 def _sha(p: pathlib.Path) -> str:

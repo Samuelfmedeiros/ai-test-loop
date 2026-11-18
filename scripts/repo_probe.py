@@ -142,6 +142,20 @@ def _checks(root: str, info: dict) -> tuple[list[dict], list[dict]]:
     faltando: list[dict] = []
     langs = set(info["langs"])
 
+    def _tem_teste_node() -> bool:
+        """`node --test` com *.test.js: padrão do Node moderno, sem dependência.
+
+        Medido 17/11/2026: projeto assim recebia "Nenhum teste automático
+        encontrado" e saía com 2. Só js/mjs/cjs — `.ts` exige loader extra e
+        inventar checagem que não roda é pior que não detectar.
+        """
+        padrao = re.compile(r"[^/\\]+\.(?:test|spec)\.(?:js|mjs|cjs)$")
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+            if any(padrao.match(fn) for fn in filenames):
+                return True
+        return False
+
     # ---- testes automatizados
     if "python" in langs:
         def _tem_teste_py() -> bool:
@@ -162,6 +176,9 @@ def _checks(root: str, info: dict) -> tuple[list[dict], list[dict]]:
         pm = info["pkg"] or "npm"
         checks.append({"name": f"testes automáticos ({pm})",
                        "cmd": f"{pm} test --silent" if pm == "npm" else f"{pm} test",
+                       "weight": 40, "timeout_s": 600, "cwd": root})
+    elif "node" in langs and _tem_teste_node():
+        checks.append({"name": "testes automáticos (node --test)", "cmd": "node --test",
                        "weight": 40, "timeout_s": 600, "cwd": root})
     if "go" in langs and shutil.which("go"):
         checks.append({"name": "testes automáticos (Go)", "cmd": "go test ./...",
@@ -451,6 +468,11 @@ def reclassify(results: list[dict]) -> tuple[list[dict], list[dict]]:
 
 
 _RODOU = re.compile(r"\b(\d+)\s+passed\b|\b\d+\s+tests?\s+passed\b")
+# `node --test` imprime `ℹ pass 3` / `ℹ fail 1` (spec) ou `# pass 3` (TAP), nunca
+# "N passed". Sem esta forma, projeto com node:test rodava e o relatório dizia
+# "nada chegou a rodar". `fail > 0` também prova que rodou — ler só `pass`
+# esconderia falha real atrás de "inconclusivo".
+_RODOU_NODE = re.compile(r"^\s*(?:ℹ|#)\s*(?:pass|fail)\s+(\d+)\s*$", re.MULTILINE)
 
 
 def _rodou_de_verdade(results: list[dict]) -> bool:
@@ -461,9 +483,13 @@ def _rodou_de_verdade(results: list[dict]) -> bool:
     esconderia uma falha real do projeto.
     """
     for r in results:
-        m = _RODOU.search(r.get("evidence") or "")
+        ev = r.get("evidence") or ""
+        m = _RODOU.search(ev)
         if m and int(m.group(1) or 0) > 0:
             return True
+        for mm in _RODOU_NODE.finditer(ev):
+            if int(mm.group(1) or 0) > 0:
+                return True
     return False
 
 
